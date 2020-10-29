@@ -1,23 +1,7 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 class FTS4TableBuilderTests: GRDBTestCase {
-    
-    override func setUp() {
-        super.setUp()
-        
-        dbConfiguration.trace = { [unowned self] sql in
-            // Ignore virtual table logs
-            if !sql.hasPrefix("--") {
-                self.sqlQueries.append(sql)
-            }
-        }
-    }
-    
     func testWithoutBody() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -61,12 +45,6 @@ class FTS4TableBuilderTests: GRDBTestCase {
     }
 
     func testUnicode61Tokenizer() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS4()) { t in
@@ -77,12 +55,6 @@ class FTS4TableBuilderTests: GRDBTestCase {
     }
 
     func testUnicode61TokenizerDiacriticsKeep() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS4()) { t in
@@ -92,6 +64,7 @@ class FTS4TableBuilderTests: GRDBTestCase {
         }
     }
     
+    // TODO: why only custom SQLite build?
     #if GRDBCUSTOMSQLITE
     func testUnicode61TokenizerDiacriticsRemove() throws {
         let dbQueue = try makeDatabaseQueue()
@@ -105,12 +78,6 @@ class FTS4TableBuilderTests: GRDBTestCase {
     #endif
 
     func testUnicode61TokenizerSeparators() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS4()) { t in
@@ -121,12 +88,6 @@ class FTS4TableBuilderTests: GRDBTestCase {
     }
 
     func testUnicode61TokenizerTokenCharacters() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS4()) { t in
@@ -156,12 +117,6 @@ class FTS4TableBuilderTests: GRDBTestCase {
     }
 
     func testNotIndexedColumns() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "books", using: FTS4()) { t in
@@ -303,15 +258,17 @@ class FTS4TableBuilderTests: GRDBTestCase {
         var compressCalled = false
         var uncompressCalled = false
         
+        dbConfiguration.prepareDatabase { db in
+            db.add(function: DatabaseFunction("zipit", argumentCount: 1, pure: true, function: { dbValues in
+                compressCalled = true
+                return dbValues[0]
+            }))
+            db.add(function: DatabaseFunction("unzipit", argumentCount: 1, pure: true, function: { dbValues in
+                uncompressCalled = true
+                return dbValues[0]
+            }))
+        }
         let dbPool = try makeDatabasePool()
-        dbPool.add(function: DatabaseFunction("zipit", argumentCount: 1, pure: true, function: { dbValues in
-            compressCalled = true
-            return dbValues[0]
-        }))
-        dbPool.add(function: DatabaseFunction("unzipit", argumentCount: 1, pure: true, function: { dbValues in
-            uncompressCalled = true
-            return dbValues[0]
-        }))
         
         try dbPool.write { db in
             try db.create(virtualTable: "documents", using: FTS4()) { t in

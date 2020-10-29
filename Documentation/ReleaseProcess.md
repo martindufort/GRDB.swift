@@ -15,9 +15,10 @@ To release a new GRDB version:
 - Update GRDB version number and release date in:
     - Makefile
     - CHANGELOG.md
-    - Documentation/CustomSQLiteBuilds.md
     - GRDB.swift.podspec
     - README.md
+    - Documentation/FullTextSearch.md
+    - Documentation/Migrations.md
     - Support/Info.plist
 - Commit and tag
 - Check tag authors: `git for-each-ref --format '%(refname) %(authorname)' refs/tags`

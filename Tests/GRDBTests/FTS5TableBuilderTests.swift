@@ -1,24 +1,8 @@
 #if SQLITE_ENABLE_FTS5
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 class FTS5TableBuilderTests: GRDBTestCase {
-    
-    override func setUp() {
-        super.setUp()
-        
-        dbConfiguration.trace = { [unowned self] sql in
-            // Ignore virtual table logs
-            if !sql.hasPrefix("--") {
-                self.sqlQueries.append(sql)
-            }
-        }
-    }
-    
     func testWithoutBody() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -53,6 +37,28 @@ class FTS5TableBuilderTests: GRDBTestCase {
                 t.column("content")
             }
             assertDidExecute(sql: "CREATE VIRTUAL TABLE \"documents\" USING fts5(content, tokenize='ascii')")
+        }
+    }
+
+    func testAsciiTokenizerSeparators() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.create(virtualTable: "documents", using: FTS5()) { t in
+                t.tokenizer = .ascii(separators: ["X"])
+                t.column("content")
+            }
+            assertDidExecute(sql: "CREATE VIRTUAL TABLE \"documents\" USING fts5(content, tokenize='ascii separators ''X''')")
+        }
+    }
+
+    func testAsciiTokenizerTokenCharacters() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.create(virtualTable: "documents", using: FTS5()) { t in
+                t.tokenizer = .ascii(tokenCharacters: Set(".-"))
+                t.column("content")
+            }
+            assertDidExecute(sql: "CREATE VIRTUAL TABLE \"documents\" USING fts5(content, tokenize='ascii tokenchars ''-.''')")
         }
     }
 
@@ -113,6 +119,21 @@ class FTS5TableBuilderTests: GRDBTestCase {
 
     #if GRDBCUSTOMSQLITE
     func testUnicode61TokenizerDiacriticsRemove() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.create(virtualTable: "documents", using: FTS5()) { t in
+                t.tokenizer = .unicode61(diacritics: .remove)
+                t.column("content")
+            }
+            assertDidExecute(sql: "CREATE VIRTUAL TABLE \"documents\" USING fts5(content, tokenize='unicode61 remove_diacritics 2')")
+        }
+    }
+    #elseif !GRDBCIPHER
+    func testUnicode61TokenizerDiacriticsRemove() throws {
+        guard #available(OSX 10.16, iOS 14, tvOS 14, watchOS 7, *) else {
+            throw XCTSkip()
+        }
+        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS5()) { t in

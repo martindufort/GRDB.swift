@@ -66,7 +66,11 @@ Once you have a custom tokenizer type that adopts [FTS5CustomTokenizer](#fts5cus
 ```swift
 class MyTokenizer : FTS5CustomTokenizer { ... }
 
-dbQueue.add(tokenizer: MyTokenizer.self) // or dbPool.add
+var config = Configuration()
+config.prepareDatabase { db in
+    db.add(tokenizer: MyTokenizer.self)
+}
+let dbQueue = try DatabaseQueue(path: dbPath, configuration: config)
 ```
 
 **Create [full-text tables](../../../#create-fts5-virtual-tables) that use the custom tokenizer:**
@@ -313,7 +317,7 @@ final class SynonymsTokenizer : FTS5WrapperTokenizer {
     }
     
     func synonyms(for token: String) -> Set<String>? {
-        return synonyms.first { $0.contains(token) }
+        synonyms.first { $0.contains(token) }
     }
     
     func accept(token: String, flags: FTS5TokenFlags, for tokenization: FTS5Tokenization, tokenCallback: FTS5WrapperTokenCallback) throws {
@@ -371,7 +375,7 @@ final class LatinAsciiTokenizer : FTS5WrapperTokenizer {
 }
 ```
 
-> :point_up: **Note**: String.applyingTransform is not available before iOS 9.0 and macOS 10.11. Use the Core Foundation function [CFStringTransform](https://developer.apple.com/reference/corefoundation/1542411-cfstringtransform) instead.
+> :point_up: **Note**: String.applyingTransform is not available before macOS 10.11. Use the Core Foundation function [CFStringTransform](https://developer.apple.com/reference/corefoundation/1542411-cfstringtransform) instead.
 
 Remember to register LatinAsciiTokenizer before using it:
 

@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+@testable import GRDB
 
 class PrimaryKeyInfoTests: GRDBTestCase {
     
@@ -15,6 +11,7 @@ class PrimaryKeyInfoTests: GRDBTestCase {
             XCTAssertEqual(primaryKey.columns, [Column.rowID.name])
             XCTAssertNil(primaryKey.rowIDColumn)
             XCTAssertTrue(primaryKey.isRowID)
+            XCTAssertTrue(primaryKey.tableHasRowID)
         }
     }
     
@@ -26,6 +23,7 @@ class PrimaryKeyInfoTests: GRDBTestCase {
             XCTAssertEqual(primaryKey.columns, ["id"])
             XCTAssertEqual(primaryKey.rowIDColumn, "id")
             XCTAssertTrue(primaryKey.isRowID)
+            XCTAssertTrue(primaryKey.tableHasRowID)
         }
     }
     
@@ -37,6 +35,7 @@ class PrimaryKeyInfoTests: GRDBTestCase {
             XCTAssertEqual(primaryKey.columns, ["name"])
             XCTAssertNil(primaryKey.rowIDColumn)
             XCTAssertFalse(primaryKey.isRowID)
+            XCTAssertTrue(primaryKey.tableHasRowID)
         }
     }
     
@@ -48,6 +47,31 @@ class PrimaryKeyInfoTests: GRDBTestCase {
             XCTAssertEqual(primaryKey.columns, ["a", "b"])
             XCTAssertNil(primaryKey.rowIDColumn)
             XCTAssertFalse(primaryKey.isRowID)
+            XCTAssertTrue(primaryKey.tableHasRowID)
+        }
+    }
+    
+    func testNonRowIDPrimaryKeyWithoutRowID() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.execute(sql: "CREATE TABLE items (name TEXT PRIMARY KEY) WITHOUT ROWID")
+            let primaryKey = try db.primaryKey("items")
+            XCTAssertEqual(primaryKey.columns, ["name"])
+            XCTAssertNil(primaryKey.rowIDColumn)
+            XCTAssertFalse(primaryKey.isRowID)
+            XCTAssertFalse(primaryKey.tableHasRowID)
+        }
+    }
+    
+    func testCompoundPrimaryKeyWithoutRowID() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.execute(sql: "CREATE TABLE items (a TEXT, b INTEGER, PRIMARY KEY (a,b)) WITHOUT ROWID")
+            let primaryKey = try db.primaryKey("items")
+            XCTAssertEqual(primaryKey.columns, ["a", "b"])
+            XCTAssertNil(primaryKey.rowIDColumn)
+            XCTAssertFalse(primaryKey.isRowID)
+            XCTAssertFalse(primaryKey.tableHasRowID)
         }
     }
 }

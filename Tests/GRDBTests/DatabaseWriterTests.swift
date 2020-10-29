@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 class DatabaseWriterTests : GRDBTestCase {
     
@@ -59,7 +55,7 @@ class DatabaseWriterTests : GRDBTestCase {
             }
             semaphore.signal()
 
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 2, handler: nil)
             let tableExists = try dbWriter.read { try $0.tableExists("testAsyncWriteWithoutTransaction") }
             XCTAssertTrue(tableExists)
         }
@@ -86,14 +82,13 @@ class DatabaseWriterTests : GRDBTestCase {
                 expectation.fulfill()
             }
             semaphore.signal()
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 2, handler: nil)
         }
         
         try test(makeDatabaseQueue())
         try test(makeDatabasePool())
     }
     
-    #if compiler(>=5.0)
     func testAsyncWriteSuccess() throws {
         func test(_ dbWriter: DatabaseWriter) throws {
             let expectation = self.expectation(description: "updates")
@@ -114,7 +109,7 @@ class DatabaseWriterTests : GRDBTestCase {
             })
             semaphore.signal()
             
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 2, handler: nil)
             let tableExists = try dbWriter.read { try $0.tableExists("testAsyncWrite") }
             XCTAssertTrue(tableExists)
         }
@@ -122,9 +117,7 @@ class DatabaseWriterTests : GRDBTestCase {
         try test(makeDatabaseQueue())
         try test(makeDatabasePool())
     }
-    #endif
     
-    #if compiler(>=5.0)
     func testAsyncWriteError() throws {
         func test(_ dbWriter: DatabaseWriter) throws {
             let expectation = self.expectation(description: "updates")
@@ -148,14 +141,13 @@ class DatabaseWriterTests : GRDBTestCase {
                 expectation.fulfill()
             })
             semaphore.signal()
-            waitForExpectations(timeout: 1, handler: nil)
+            waitForExpectations(timeout: 2, handler: nil)
         }
         
         try test(makeDatabaseQueue())
         try test(makeDatabasePool())
     }
-    #endif
-
+    
     func testAnyDatabaseWriter() {
         // This test passes if this code compiles.
         let writer: DatabaseWriter = DatabaseQueue()

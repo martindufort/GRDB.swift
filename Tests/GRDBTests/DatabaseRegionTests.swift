@@ -1,16 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    @testable import GRDBCustomSQLite
-#else
-    #if GRDBCIPHER
-        import SQLCipher
-    #elseif SWIFT_PACKAGE
-        import CSQLite
-    #else
-        import SQLite3
-    #endif
-    @testable import GRDB
-#endif
+@testable import GRDB
 
 class DatabaseRegionTests : GRDBTestCase {
     
@@ -57,7 +46,7 @@ class DatabaseRegionTests : GRDBTestCase {
             }
         }
         
-        XCTAssertEqual(unions.map { $0.description }, [
+        XCTAssertEqual(unions.map(\.description), [
             "full database",
             "full database",
             "full database",
@@ -144,7 +133,7 @@ class DatabaseRegionTests : GRDBTestCase {
             }
         }
         
-        XCTAssertEqual(unions.map { $0.description }, ["foo(a)[1]", "foo(a,b)[1,2]", "foo(a,b)[1,2]", "foo(b)[2]"])
+        XCTAssertEqual(unions.map(\.description), ["foo(a)[1]", "foo(a,b)[1,2]", "foo(a,b)[1,2]", "foo(b)[2]"])
     }
     
     func testRegionIntersection() {
@@ -165,7 +154,7 @@ class DatabaseRegionTests : GRDBTestCase {
             }
         }
         
-        XCTAssertEqual(intersection.map { $0.description }, [
+        XCTAssertEqual(intersection.map(\.description), [
             "full database",
             "empty",
             "foo(*)",
@@ -252,7 +241,7 @@ class DatabaseRegionTests : GRDBTestCase {
             }
         }
         
-        XCTAssertEqual(intersection.map { $0.description }, ["foo(a)[1]", "empty", "empty", "foo(b)[2]"])
+        XCTAssertEqual(intersection.map(\.description), ["foo(a)[1]", "empty", "empty", "foo(b)[2]"])
     }
 
     func testSelectStatement() throws {
@@ -305,7 +294,6 @@ class DatabaseRegionTests : GRDBTestCase {
                 let request = Record.filter(Column("id") >= 1)
                 try XCTAssertEqual(request.databaseRegion(db).description, "foo(a,id)")
             }
-            
             do {
                 let request = Record.filter((Column("id") == 1) || (Column("a") == "foo"))
                 try XCTAssertEqual(request.databaseRegion(db).description, "foo(a,id)")
@@ -317,22 +305,18 @@ class DatabaseRegionTests : GRDBTestCase {
                 let request = Record.filter(Column("id") == nil)
                 try XCTAssertEqual(request.databaseRegion(db).description, "empty")
             }
-
             do {
                 let request = Record.filter(Column("id") === nil)
                 try XCTAssertEqual(request.databaseRegion(db).description, "empty")
             }
-            
             do {
                 let request = Record.filter(nil == Column("id"))
                 try XCTAssertEqual(request.databaseRegion(db).description, "empty")
             }
-            
             do {
                 let request = Record.filter(nil === Column("id"))
                 try XCTAssertEqual(request.databaseRegion(db).description, "empty")
             }
-            
             do {
                 let request = Record.filter((Column("id") == 1) && (Column("id") == 2))
                 try XCTAssertEqual(request.databaseRegion(db).description, "empty")
@@ -404,6 +388,14 @@ class DatabaseRegionTests : GRDBTestCase {
                 try XCTAssertEqual(request.databaseRegion(db).description, "foo(a,id)[1,2,3]")
             }
             do {
+                let request = Record.filter([1, 2, 3].contains(Column("id")) || [2, 3, 4].contains(Column.rowID))
+                try XCTAssertEqual(request.databaseRegion(db).description, "foo(a,id)[1,2,3,4]")
+            }
+            do {
+                let request = Record.filter([1, 2, 3].contains(Column("id")) && [2, 3, 4].contains(Column.rowID))
+                try XCTAssertEqual(request.databaseRegion(db).description, "foo(a,id)[2,3]")
+            }
+            do {
                 let request = Record.filter(keys: [1, 2, 3])
                 try XCTAssertEqual(request.databaseRegion(db).description, "foo(a,id)[1,2,3]")
             }
@@ -457,17 +449,12 @@ class DatabaseRegionTests : GRDBTestCase {
             try XCTAssertEqual(request.databaseRegion(db).description, "foo(a,id)[1,2,3]")
 
             do {
-                let derivedRequest: AnyFetchRequest<Row> = AnyFetchRequest(request)
+                let derivedRequest = AnyFetchRequest(request)
                 try XCTAssertEqual(derivedRequest.databaseRegion(db).description, "foo(a,id)[1,2,3]")
             }
             do {
                 let derivedRequest: AdaptedFetchRequest = request.adapted { db in SuffixRowAdapter(fromIndex: 1) }
                 try XCTAssertEqual(derivedRequest.databaseRegion(db).description, "foo(a,id)[1,2,3]")
-            }
-            do {
-                // SQL request loses region info
-                let derivedRequest = try SQLRequest(db, request: request)
-                try XCTAssertEqual(derivedRequest.databaseRegion(db).description, "foo(a,id)")
             }
         }
     }
@@ -529,12 +516,6 @@ class DatabaseRegionTests : GRDBTestCase {
         // the rowid column, regardless of its name in the request (rowid, oid, _rowid_)
         //
         // See also testRowIdNameInSelectStatement
-        
-        guard sqlite3_libversion_number() > 3007013 else {
-            // This test fails on iOS 8.1 (SQLite 3.7.13)
-            // TODO: evaluate the consequences
-            return
-        }
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.execute(sql: "CREATE TABLE foo (name TEXT)")

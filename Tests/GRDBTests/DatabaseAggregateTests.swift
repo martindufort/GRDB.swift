@@ -1,14 +1,8 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 private struct CustomValueType : DatabaseValueConvertible {
-    var databaseValue: DatabaseValue {
-        return "CustomValueType".databaseValue
-    }
+    var databaseValue: DatabaseValue { "CustomValueType".databaseValue }
     static func fromDatabaseValue(_ dbValue: DatabaseValue) -> CustomValueType? {
         guard let string = String.fromDatabaseValue(dbValue), string == "CustomValueType" else {
             return nil
@@ -24,14 +18,12 @@ class DatabaseAggregateTests: GRDBTestCase {
     func testAggregateReturningNull() throws {
         struct Aggregate : DatabaseAggregate {
             func step(_ values: [DatabaseValue]) { }
-            func finalize() -> DatabaseValueConvertible? {
-                return nil
-            }
+            func finalize() -> DatabaseValueConvertible? { nil }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertTrue(try DatabaseValue.fetchOne(db, sql: "SELECT f()")!.isNull)
         }
     }
@@ -39,14 +31,12 @@ class DatabaseAggregateTests: GRDBTestCase {
     func testAggregateReturningInt64() throws {
         struct Aggregate : DatabaseAggregate {
             func step(_ values: [DatabaseValue]) { }
-            func finalize() -> DatabaseValueConvertible? {
-                return Int64(1)
-            }
+            func finalize() -> DatabaseValueConvertible? { Int64(1) }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try Int64.fetchOne(db, sql: "SELECT f()")!, Int64(1))
         }
     }
@@ -55,13 +45,11 @@ class DatabaseAggregateTests: GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         struct Aggregate : DatabaseAggregate {
             func step(_ values: [DatabaseValue]) { }
-            func finalize() -> DatabaseValueConvertible? {
-                return 1e100
-            }
+            func finalize() -> DatabaseValueConvertible? { 1e100 }
         }
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try Double.fetchOne(db, sql: "SELECT f()")!, 1e100)
         }
     }
@@ -69,14 +57,12 @@ class DatabaseAggregateTests: GRDBTestCase {
     func testAggregateReturningString() throws {
         struct Aggregate : DatabaseAggregate {
             func step(_ values: [DatabaseValue]) { }
-            func finalize() -> DatabaseValueConvertible? {
-                return "foo"
-            }
+            func finalize() -> DatabaseValueConvertible? { "foo" }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try String.fetchOne(db, sql: "SELECT f()")!, "foo")
         }
     }
@@ -85,13 +71,13 @@ class DatabaseAggregateTests: GRDBTestCase {
         struct Aggregate : DatabaseAggregate {
             func step(_ values: [DatabaseValue]) { }
             func finalize() -> DatabaseValueConvertible? {
-                return "foo".data(using: .utf8)
+                "foo".data(using: .utf8)
             }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try Data.fetchOne(db, sql: "SELECT f()")!, "foo".data(using: .utf8))
         }
     }
@@ -99,14 +85,12 @@ class DatabaseAggregateTests: GRDBTestCase {
     func testAggregateReturningCustomValueType() throws {
         struct Aggregate : DatabaseAggregate {
             func step(_ values: [DatabaseValue]) { }
-            func finalize() -> DatabaseValueConvertible? {
-                return CustomValueType()
-            }
+            func finalize() -> DatabaseValueConvertible? { CustomValueType() }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertTrue(try CustomValueType.fetchOne(db, sql: "SELECT f()") != nil)
         }
     }
@@ -119,14 +103,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             mutating func step(_ dbValues: [DatabaseValue]) {
                 result = dbValues[0].isNull
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertTrue(try Bool.fetchOne(db, sql: "SELECT f(NULL)")!)
             XCTAssertFalse(try Bool.fetchOne(db, sql: "SELECT f(1)")!)
             XCTAssertFalse(try Bool.fetchOne(db, sql: "SELECT f(1.1)")!)
@@ -142,14 +124,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             mutating func step(_ dbValues: [DatabaseValue]) {
                 result = Int64.fromDatabaseValue(dbValues[0])
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertTrue(try Int64.fetchOne(db, sql: "SELECT f(NULL)") == nil)
             XCTAssertEqual(try Int64.fetchOne(db, sql: "SELECT f(1)")!, 1)
             XCTAssertEqual(try Int64.fetchOne(db, sql: "SELECT f(1.1)")!, 1)
@@ -162,14 +142,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             mutating func step(_ dbValues: [DatabaseValue]) {
                 result = Double.fromDatabaseValue(dbValues[0])
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertTrue(try Double.fetchOne(db, sql: "SELECT f(NULL)") == nil)
             XCTAssertEqual(try Double.fetchOne(db, sql: "SELECT f(1)")!, 1.0)
             XCTAssertEqual(try Double.fetchOne(db, sql: "SELECT f(1.1)")!, 1.1)
@@ -182,14 +160,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             mutating func step(_ dbValues: [DatabaseValue]) {
                 result = String.fromDatabaseValue(dbValues[0])
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertTrue(try String.fetchOne(db, sql: "SELECT f(NULL)") == nil)
             XCTAssertEqual(try String.fetchOne(db, sql: "SELECT f('foo')")!, "foo")
         }
@@ -201,14 +177,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             mutating func step(_ dbValues: [DatabaseValue]) {
                 result = Data.fromDatabaseValue(dbValues[0])
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertTrue(try Data.fetchOne(db, sql: "SELECT f(NULL)") == nil)
             XCTAssertEqual(try Data.fetchOne(db, sql: "SELECT f(?)", arguments: ["foo".data(using: .utf8)])!, "foo".data(using: .utf8))
             XCTAssertEqual(try Data.fetchOne(db, sql: "SELECT f(?)", arguments: [Data()])!, Data())
@@ -221,14 +195,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             mutating func step(_ dbValues: [DatabaseValue]) {
                 result = CustomValueType.fromDatabaseValue(dbValues[0])
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertTrue(try CustomValueType.fetchOne(db, sql: "SELECT f(NULL)") == nil)
             XCTAssertTrue(try CustomValueType.fetchOne(db, sql: "SELECT f('CustomValueType')") != nil)
         }
@@ -239,14 +211,12 @@ class DatabaseAggregateTests: GRDBTestCase {
     func testAggregateWithoutArgument() throws {
         struct Aggregate : DatabaseAggregate {
             func step(_ dbValues: [DatabaseValue]) { }
-            func finalize() -> DatabaseValueConvertible? {
-                return "foo"
-            }
+            func finalize() -> DatabaseValueConvertible? { "foo" }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try String.fetchOne(db, sql: "SELECT f()")!, "foo")
             do {
                 try db.execute(sql: "SELECT f(1)")
@@ -255,7 +225,7 @@ class DatabaseAggregateTests: GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                 XCTAssertEqual(error.message!, "wrong number of arguments to function f()")
                 XCTAssertEqual(error.sql!, "SELECT f(1)")
-                XCTAssertEqual(error.description, "SQLite error 1 with statement `SELECT f(1)`: wrong number of arguments to function f()")
+                XCTAssertEqual(error.description, "SQLite error 1: wrong number of arguments to function f() - while executing `SELECT f(1)`")
             }
         }
     }
@@ -266,14 +236,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             mutating func step(_ dbValues: [DatabaseValue]) {
                 result = String.fromDatabaseValue(dbValues[0])?.uppercased()
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try String.fetchOne(db, sql: "SELECT upper(?)", arguments: ["Roué"])!, "ROUé")
             XCTAssertEqual(try String.fetchOne(db, sql: "SELECT f(?)", arguments: ["Roué"])!, "ROUÉ")
             XCTAssertTrue(try String.fetchOne(db, sql: "SELECT f(NULL)") == nil)
@@ -284,7 +252,7 @@ class DatabaseAggregateTests: GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                 XCTAssertEqual(error.message!, "wrong number of arguments to function f()")
                 XCTAssertEqual(error.sql!, "SELECT f()")
-                XCTAssertEqual(error.description, "SQLite error 1 with statement `SELECT f()`: wrong number of arguments to function f()")
+                XCTAssertEqual(error.description, "SQLite error 1: wrong number of arguments to function f() - while executing `SELECT f()`")
             }
         }
     }
@@ -296,14 +264,12 @@ class DatabaseAggregateTests: GRDBTestCase {
                 let ints = dbValues.compactMap { Int.fromDatabaseValue($0) }
                 result = ints.reduce(0, +)
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 2, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 2, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f(1, 2)")!, 3)
             do {
                 try db.execute(sql: "SELECT f()")
@@ -312,7 +278,7 @@ class DatabaseAggregateTests: GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                 XCTAssertEqual(error.message!, "wrong number of arguments to function f()")
                 XCTAssertEqual(error.sql!, "SELECT f()")
-                XCTAssertEqual(error.description, "SQLite error 1 with statement `SELECT f()`: wrong number of arguments to function f()")
+                XCTAssertEqual(error.description, "SQLite error 1: wrong number of arguments to function f() - while executing `SELECT f()`")
             }
         }
     }
@@ -323,14 +289,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             mutating func step(_ dbValues: [DatabaseValue]) {
                 result = dbValues.count
             }
-            func finalize() -> DatabaseValueConvertible? {
-                return result
-            }
+            func finalize() -> DatabaseValueConvertible? { result }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f()")!, 0)
             XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f(1)")!, 1)
             XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f(1, 1)")!, 2)
@@ -344,14 +308,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             func step(_ dbValues: [DatabaseValue]) throws {
                 throw DatabaseError(message: "custom error message")
             }
-            func finalize() -> DatabaseValueConvertible? {
-                fatalError()
-            }
+            func finalize() -> DatabaseValueConvertible? { fatalError() }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             do {
                 try db.execute(sql: "SELECT f()")
                 XCTFail("Expected DatabaseError")
@@ -367,14 +329,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             func step(_ dbValues: [DatabaseValue]) throws {
                 throw DatabaseError(resultCode: ResultCode(rawValue: 123))
             }
-            func finalize() -> DatabaseValueConvertible? {
-                fatalError()
-            }
+            func finalize() -> DatabaseValueConvertible? { fatalError() }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             do {
                 try db.execute(sql: "SELECT f()")
                 XCTFail("Expected DatabaseError")
@@ -390,14 +350,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             func step(_ dbValues: [DatabaseValue]) throws {
                 throw DatabaseError(resultCode: ResultCode(rawValue: 123), message: "custom error message")
             }
-            func finalize() -> DatabaseValueConvertible? {
-                fatalError()
-            }
+            func finalize() -> DatabaseValueConvertible? { fatalError() }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             do {
                 try db.execute(sql: "SELECT f()")
                 XCTFail("Expected DatabaseError")
@@ -413,14 +371,12 @@ class DatabaseAggregateTests: GRDBTestCase {
             func step(_ dbValues: [DatabaseValue]) throws {
                 throw NSError(domain: "CustomErrorDomain", code: 123, userInfo: [NSLocalizedDescriptionKey: "custom error message"])
             }
-            func finalize() -> DatabaseValueConvertible? {
-                fatalError()
-            }
+            func finalize() -> DatabaseValueConvertible? { fatalError() }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             do {
                 try db.execute(sql: "SELECT f()")
                 XCTFail("Expected DatabaseError")
@@ -443,9 +399,9 @@ class DatabaseAggregateTests: GRDBTestCase {
             }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             do {
                 try db.execute(sql: "SELECT f()")
                 XCTFail("Expected DatabaseError")
@@ -464,9 +420,9 @@ class DatabaseAggregateTests: GRDBTestCase {
             }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             do {
                 try db.execute(sql: "SELECT f()")
                 XCTFail("Expected DatabaseError")
@@ -485,9 +441,9 @@ class DatabaseAggregateTests: GRDBTestCase {
             }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             do {
                 try db.execute(sql: "SELECT f()")
                 XCTFail("Expected DatabaseError")
@@ -506,9 +462,9 @@ class DatabaseAggregateTests: GRDBTestCase {
             }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", aggregate: Aggregate.self)
+            db.add(function: fn)
             do {
                 try db.execute(sql: "SELECT f()")
                 XCTFail("Expected DatabaseError")
@@ -531,14 +487,12 @@ class DatabaseAggregateTests: GRDBTestCase {
                     sum = (sum ?? 0) + int
                 }
             }
-            func finalize() throws -> DatabaseValueConvertible? {
-                return sum
-            }
+            func finalize() throws -> DatabaseValueConvertible? { sum }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT f(a) FROM (SELECT 1 AS a UNION ALL SELECT 2 UNION ALL SELECT 3)")!, 6)
         }
     }
@@ -551,14 +505,12 @@ class DatabaseAggregateTests: GRDBTestCase {
                     sum = (sum ?? 0) + int
                 }
             }
-            func finalize() throws -> DatabaseValueConvertible? {
-                return sum
-            }
+            func finalize() throws -> DatabaseValueConvertible? { sum }
         }
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 1, aggregate: Aggregate.self)
+            db.add(function: fn)
             let row = try Row.fetchOne(db, sql: "SELECT f(a), f(b) FROM (SELECT 1 AS a, 2 AS b UNION ALL SELECT 2, 4 UNION ALL SELECT 3, 6)")!
             XCTAssertEqual(row[0], 6)
             XCTAssertEqual(row[1], 12)
@@ -574,9 +526,7 @@ class DatabaseAggregateTests: GRDBTestCase {
             init() { Aggregate.onInit?() }
             deinit { Aggregate.onDeinit?() }
             func step(_ dbValues: [DatabaseValue]) { }
-            func finalize() -> DatabaseValueConvertible? {
-                return nil
-            }
+            func finalize() -> DatabaseValueConvertible? { nil }
         }
         var allocationCount = 0
         var aliveCount = 0
@@ -589,9 +539,9 @@ class DatabaseAggregateTests: GRDBTestCase {
         }
         
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         try dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(allocationCount, 0)
             XCTAssertEqual(aliveCount, 0)
             try db.execute(sql: "SELECT f()")
@@ -609,9 +559,7 @@ class DatabaseAggregateTests: GRDBTestCase {
             func step(_ dbValues: [DatabaseValue]) throws {
                 throw DatabaseError(message: "boo")
             }
-            func finalize() -> DatabaseValueConvertible? {
-                fatalError()
-            }
+            func finalize() -> DatabaseValueConvertible? { fatalError() }
         }
         var allocationCount = 0
         var aliveCount = 0
@@ -624,9 +572,9 @@ class DatabaseAggregateTests: GRDBTestCase {
         }
         
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(allocationCount, 0)
             XCTAssertEqual(aliveCount, 0)
             _ = try? db.execute(sql: "SELECT f()")
@@ -658,9 +606,9 @@ class DatabaseAggregateTests: GRDBTestCase {
         }
         
         let dbQueue = try makeDatabaseQueue()
-        let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
-        dbQueue.add(function: fn)
         dbQueue.inDatabase { db in
+            let fn = DatabaseFunction("f", argumentCount: 0, aggregate: Aggregate.self)
+            db.add(function: fn)
             XCTAssertEqual(allocationCount, 0)
             XCTAssertEqual(aliveCount, 0)
             _ = try? db.execute(sql: "SELECT f()")

@@ -1,11 +1,7 @@
 #if SQLITE_ENABLE_FTS5
 import XCTest
 import Foundation
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 // A custom wrapper tokenizer that ignores some tokens
 private final class StopWordsTokenizer : FTS5WrapperTokenizer {
@@ -20,9 +16,7 @@ private final class StopWordsTokenizer : FTS5WrapperTokenizer {
         }
     }
     
-    func ignores(_ token: String) -> Bool {
-        return token == "bar"
-    }
+    func ignores(_ token: String) -> Bool { token == "bar" }
     
     func accept(token: String, flags: FTS5TokenFlags, for tokenization: FTS5Tokenization, tokenCallback: FTS5WrapperTokenCallback) throws {
         // Notify token unless ignored
@@ -43,7 +37,7 @@ private final class LatinAsciiTokenizer : FTS5WrapperTokenizer {
     
     func accept(token: String, flags: FTS5TokenFlags, for tokenization: FTS5Tokenization, tokenCallback: FTS5WrapperTokenCallback) throws {
         // Convert token to Latin-ASCII and lowercase
-        if #available(iOS 9.0, OSX 10.11, *) {
+        if #available(OSX 10.11, *) {
             if let token = token.applyingTransform(StringTransform("Latin-ASCII; Lower"), reverse: false) {
                 try tokenCallback(token, flags)
             }
@@ -71,7 +65,7 @@ private final class SynonymsTokenizer : FTS5WrapperTokenizer {
     }
     
     func synonyms(for token: String) -> Set<String>? {
-        return synonyms.first { $0.contains(token) }
+        synonyms.first { $0.contains(token) }
     }
     
     func accept(token: String, flags: FTS5TokenFlags, for tokenization: FTS5Tokenization, tokenCallback: FTS5WrapperTokenCallback) throws {
@@ -102,9 +96,9 @@ class FTS5WrapperTokenizerTests: GRDBTestCase {
     
     func testStopWordsTokenizerDatabaseQueue() throws {
         let dbQueue = try makeDatabaseQueue()
-        dbQueue.add(tokenizer: StopWordsTokenizer.self)
         
         try dbQueue.inDatabase { db in
+            db.add(tokenizer: StopWordsTokenizer.self)
             try db.create(virtualTable: "documents", using: FTS5()) { t in
                 t.tokenizer = StopWordsTokenizer.tokenizerDescriptor()
                 t.column("content")
@@ -123,8 +117,10 @@ class FTS5WrapperTokenizerTests: GRDBTestCase {
     }
 
     func testStopWordsTokenizerDatabasePool() throws {
+        dbConfiguration.prepareDatabase { db in
+            db.add(tokenizer: StopWordsTokenizer.self)
+        }
         let dbPool = try makeDatabaseQueue()
-        dbPool.add(tokenizer: StopWordsTokenizer.self)
         
         try dbPool.write { db in
             try db.create(virtualTable: "documents", using: FTS5()) { t in
@@ -155,10 +151,10 @@ class FTS5WrapperTokenizerTests: GRDBTestCase {
 
     func testLatinAsciiTokenizer() throws {
         let dbQueue = try makeDatabaseQueue()
-        dbQueue.add(tokenizer: LatinAsciiTokenizer.self)
         
         // Without Latin ASCII conversion
         try dbQueue.inDatabase { db in
+            db.add(tokenizer: LatinAsciiTokenizer.self)
             try db.create(virtualTable: "documents", using: FTS5()) { t in
                 t.tokenizer = .unicode61()
                 t.column("content")
@@ -192,9 +188,9 @@ class FTS5WrapperTokenizerTests: GRDBTestCase {
 
     func testSynonymsTokenizer() throws {
         let dbQueue = try makeDatabaseQueue()
-        dbQueue.add(tokenizer: SynonymsTokenizer.self)
         
         try dbQueue.inDatabase { db in
+            db.add(tokenizer: SynonymsTokenizer.self)
             try db.create(virtualTable: "documents", using: FTS5()) { t in
                 t.tokenizer = SynonymsTokenizer.tokenizerDescriptor()
                 t.column("content")

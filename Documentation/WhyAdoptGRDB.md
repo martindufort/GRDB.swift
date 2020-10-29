@@ -115,25 +115,41 @@ let player = Player(name: "arthur", score: 1000)
 let players = try Player.fetchAll(db)
 ```
 
-**Fetched records behave just like an in-memory cache of the database content.** Your application is free to decide, on its own, how it should handle the lifetime of those cached values: by ignoring future database changes, by observing database changes and react accordingly, or in any way deemed relevant.
+**Fetched records behave just like an in-memory cache of the database content.** Your application is free to decide, on its own, how it should handle the lifetime of those cached values: by ignoring future database changes, or by observing database changes and react accordingly.
 
-There are several ways to be notified of database changes. You can build on top of the fundamental but low-level [TransactionObserver] protocol. Usually, you'll use [ValueObservation], which notifies fresh values after each database change. And don't forget [GRDBCombine] and [RxGRDB], two sets of reactive extensions based on [Combine] and [RxSwift]:
+In order to keep your views synchronized with the database content, you can use [ValueObservation]. It notifies fresh values after each database change, with convenient support for [Combine](Combine.md) and [RxSwift](https://github.com/RxSwiftCommunity/RxGRDB).
 
 ```swift
-Player.all().rx
-    .fetchAll(in: dbQueue)
-    .subscribe(onNext: { players: [Player] in
-        print("Players have changed")
-    })
+/// An observation of [Player]
+let observation = ValueObservation.tracking { db in
+    try Player.fetchAll(db)
+}
+
+// Vanilla GRDB
+let cancellable = observation.start(in: dbQueue,
+    onError: { error in ... },
+    onChange: { (players: [Player]) in print("Fresh players") })
+
+// GRDB + Combine
+let cancellable = observation.publisher(in: dbQueue).sink(
+    receiveCompletion: { completion in ... },
+    receiveValue: { (players: [Player]) in print("Fresh players") })
+    
+// RxGRDB
+let disposable = observation.rx.observe(in: dbQueue).subscribe(
+    onNext: { (players: [Player]) in print("Fresh playerss") },
+    onError: { error in ... })
 ```
 
 No matter which observation technique you use, you have common guarantees:
 
 First, notifications only come from database changes safely saved on disk. This is part of the "database as the single source of truth" core principle. You won't get notifications from unsaved changes or changes that have an opportunity to be rollbacked.
 
-Next, you choose the dispatch queue on which notifications happen. It can be on the special "writer queue", which allows you to process changes before any other thread has any opportunity to perform further database modifications. But notifications can also happen on the queue of your choice (generally the main queue, by default, as in the example above). Of course, GRDB makes sure notifications happen in the same order as database transactions.
+Next, you choose the dispatch queue on which notifications happen (generally the main queue, by default, as in the examples above). GRDB makes sure notifications happen in the same order as database transactions.
 
-Finally, all changes are notified, no matter how they are performed: record methods, raw SQL statements, foreign key cascades, and even SQL triggers. GRDB roots its notification system in the rock-solid SQLite itself, so that high-level requests and raw SQL queries are equally supported.
+Finally, all changes are notified, no matter how they are performed: record methods, raw SQL statements, foreign key cascades, or SQL triggers. GRDB roots its notification system in the rock-solid SQLite itself, so that high-level requests and raw SQL queries are equally supported.
+
+See [Database Observation](../README.md#database-changes-observation) for further information.
 
 
 ### Non-blocking database reads
@@ -231,45 +247,30 @@ try db.execute(literal: "UPDATE player SET score = \(score) WHERE id = \(id)")
 
 extension Player {
     static func filter(name: String) -> SQLRequest<Player> {
-        return "SELECT * FROM \(self) WHERE \(CodingKeys.name) = \(name)"
+        "SELECT * FROM player WHERE name = \(name)"
     }
 }
 
 let player = try Player.filter(name: "Arthur O'Brien").fetchOne(db)
 ```
 
-Custom SQL requests as the one above are welcome in database observation tools like the built-in [ValueObservation], or the companion libraries [GRDBCombine] and [RxGRDB]:
+Custom SQL requests as the one above are welcome in database observation tools like the built-in [ValueObservation] and its [Combine](Combine.md) and [RxSwift](https://github.com/RxSwiftCommunity/RxGRDB) flavors:
 
 ```swift
-// RxGRDB
-Player.filter(name: "Arthur O'Brien").rx
-    .fetchOne(in: dbQueue)
-    .subscribe(onNext: { (player: Player?) in
-        print("Player has changed")
-    })
-```
+let playerObservation = ValueObservation.tracking { db in
+    try Player.filter(name: "Arthur O'Brien").fetchOne(db)
+}
 
-Power users can also consume complex joined SQL queries into handy record values, by *adapting* raw database rows to the decoded records (see [Joined Queries Support](#../README.md#joined-queries-support)):
-
-```swift
-let bookInfos: [BookInfo] = SQLRequest<BookInfo>(sql: """
-    SELECT book.*, author.*
-    FROM book
-    LEFT JOIN author ON author.id = book.authorId
-    """)
-    .adapted { db in
-        let adapters = try splittingRowAdapters(columnCounts: [
-            db.columns(in: "book").count,
-            db.columns(in: "author").count])
-        return ScopeAdapter([
-            "book": adapters[0],
-            "author": adapters[1]])
-    }
+// Observe the SQL request with Combine
+let cancellable = playerObservation.publisher(in: dbQueue).sink(
+    receiveCompletion: { completion in ... },
+    receiveValue: { (player: Player?) in print("Player has changed") })
 ```
 
 In performance-critical sections, you may want to deal with raw database rows, and fetch [lazy cursors](../README.md#cursors) instead of arrays:
 
 ```swift
+// As close to SQLite metal as possible
 let rows = try Row.fetchCursor(db, sql: "SELECT id, name, score FROM player")
 while let row = try rows.next() {
     let id: Int64 = row[0]
@@ -299,10 +300,6 @@ Happy GRDB! :gift:
 [PersistableRecord]: ../README.md#records
 [Realm]: http://realm.io
 [FetchableRecord]: ../README.md#records
-[RxGRDB]: https://github.com/RxSwiftCommunity/RxGRDB
-[RxSwift]: https://github.com/ReactiveX/RxSwift
-[GRDBCombine]: http://github.com/groue/GRDBCombine
-[Combine]: https://developer.apple.com/documentation/combine
 [SQLite.swift]: http://github.com/stephencelis/SQLite.swift
 [StORM]: https://www.perfect.org/docs/StORM.html
 [Swift-Kuery]: http://github.com/IBM-Swift/Swift-Kuery

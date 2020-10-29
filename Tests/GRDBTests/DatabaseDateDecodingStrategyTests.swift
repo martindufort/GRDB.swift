@@ -1,10 +1,6 @@
 import Foundation
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 private protocol StrategyProvider {
     static var strategy: DatabaseDateDecodingStrategy { get }
@@ -26,7 +22,7 @@ private enum StrategyMillisecondsSince1970: StrategyProvider {
     static let strategy: DatabaseDateDecodingStrategy = .millisecondsSince1970
 }
 
-@available(macOS 10.12, iOS 10.0, watchOS 3.0, tvOS 10.0, *)
+@available(macOS 10.12, watchOS 3.0, tvOS 10.0, *)
 private enum StrategyIso8601: StrategyProvider {
     static let strategy: DatabaseDateDecodingStrategy = .iso8601
 }
@@ -49,12 +45,12 @@ private enum StrategyCustom: StrategyProvider {
 }
 
 private struct RecordWithDate<Strategy: StrategyProvider>: FetchableRecord, Decodable {
-    static var databaseDateDecodingStrategy: DatabaseDateDecodingStrategy { return Strategy.strategy }
+    static var databaseDateDecodingStrategy: DatabaseDateDecodingStrategy { Strategy.strategy }
     var date: Date
 }
 
 private struct RecordWithOptionalDate<Strategy: StrategyProvider>: FetchableRecord, Decodable {
-    static var databaseDateDecodingStrategy: DatabaseDateDecodingStrategy { return Strategy.strategy }
+    static var databaseDateDecodingStrategy: DatabaseDateDecodingStrategy { Strategy.strategy }
     var date: Date?
 }
 
@@ -273,7 +269,7 @@ extension DatabaseDateDecodingStrategyTests {
 extension DatabaseDateDecodingStrategyTests {
     func testIso8601() throws {
         // check ISO8601DateFormatter availabiliity
-        if #available(macOS 10.12, iOS 10.0, watchOS 3.0, tvOS 10.0, *) {
+        if #available(macOS 10.12, watchOS 3.0, tvOS 10.0, *) {
             try makeDatabaseQueue().read { db in
                 var calendar = Calendar(identifier: .gregorian)
                 calendar.timeZone = TimeZone(secondsFromGMT: 0)!

@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 class UpdateStatementTests : GRDBTestCase {
     
@@ -168,11 +164,11 @@ class UpdateStatementTests : GRDBTestCase {
     func testUpdateStatementAcceptsSelectQueriesAndConsumeAllRows() throws {
         let dbQueue = try makeDatabaseQueue()
         var index = 0
-        dbQueue.add(function: DatabaseFunction("seq", argumentCount: 0, pure: false) { _ in
-            defer { index += 1 }
-            return index
-        })
         try dbQueue.inDatabase { db in
+            db.add(function: DatabaseFunction("seq", argumentCount: 0, pure: false) { _ in
+                defer { index += 1 }
+                return index
+            })
             try db.execute(sql: "SELECT seq() UNION ALL SELECT seq() UNION ALL SELECT seq()")
             let statement = try db.makeUpdateStatement(sql: "SELECT seq() UNION ALL SELECT seq() UNION ALL SELECT seq()")
             try statement.execute()
@@ -320,7 +316,7 @@ class UpdateStatementTests : GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                 XCTAssertEqual(error.message!, "no such table: blah")
                 XCTAssertEqual(error.sql!, "UPDATE blah SET id = 12")
-                XCTAssertEqual(error.description, "SQLite error 1 with statement `UPDATE blah SET id = 12`: no such table: blah")
+                XCTAssertEqual(error.description, "SQLite error 1: no such table: blah - while executing `UPDATE blah SET id = 12`")
             }
         }
     }
@@ -335,7 +331,7 @@ class UpdateStatementTests : GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_MISUSE)
                 XCTAssertEqual(error.message!, "Multiple statements found. To execute multiple statements, use Database.execute(sql:) instead.")
                 XCTAssertEqual(error.sql!, "UPDATE persons SET age = 1; UPDATE persons SET age = 2;")
-                XCTAssertEqual(error.description, "SQLite error 21 with statement `UPDATE persons SET age = 1; UPDATE persons SET age = 2;`: Multiple statements found. To execute multiple statements, use Database.execute(sql:) instead.")
+                XCTAssertEqual(error.description, "SQLite error 21: Multiple statements found. To execute multiple statements, use Database.execute(sql:) instead. - while executing `UPDATE persons SET age = 1; UPDATE persons SET age = 2;`")
             }
         }
     }
@@ -350,7 +346,7 @@ class UpdateStatementTests : GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_MISUSE)
                 XCTAssertEqual(error.message!, "Multiple statements found. To execute multiple statements, use Database.execute(sql:) instead.")
                 XCTAssertEqual(error.sql!, "UPDATE persons SET age = 1;x")
-                XCTAssertEqual(error.description, "SQLite error 21 with statement `UPDATE persons SET age = 1;x`: Multiple statements found. To execute multiple statements, use Database.execute(sql:) instead.")
+                XCTAssertEqual(error.description, "SQLite error 21: Multiple statements found. To execute multiple statements, use Database.execute(sql:) instead. - while executing `UPDATE persons SET age = 1;x`")
             }
         }
     }
@@ -368,7 +364,6 @@ class UpdateStatementTests : GRDBTestCase {
         }
     }
     
-    #if swift(>=5.0)
     func testExecuteSQLLiteralWithInterpolation() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.write { db in
@@ -381,5 +376,4 @@ class UpdateStatementTests : GRDBTestCase {
             XCTAssertEqual(value, 3)
         }
     }
-    #endif
 }

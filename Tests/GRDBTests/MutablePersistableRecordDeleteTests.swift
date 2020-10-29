@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 private struct Hacker : MutablePersistableRecord {
     static let databaseTableName = "hackers"
@@ -148,6 +144,12 @@ class MutablePersistableRecordDeleteTests: GRDBTestCase {
             try Person.filter(Column("name") == "Arthur").deleteAll(db)
             XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\" WHERE \"name\" = 'Arthur'")
             
+            try Person.filter(key: 1).deleteAll(db)
+            XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\" WHERE \"id\" = 1")
+            
+            try Person.filter(keys: [1, 2]).deleteAll(db)
+            XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\" WHERE \"id\" IN (1, 2)")
+
             try Person.filter(sql: "id = 1").deleteAll(db)
             XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\" WHERE id = 1")
             
@@ -160,11 +162,12 @@ class MutablePersistableRecordDeleteTests: GRDBTestCase {
             try Person.order(Column("name")).deleteAll(db)
             XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\"")
             
-            // TODO: find out when ENABLE_UPDATE_DELETE_LIMIT is not there.
-            // iOS8.1 can't run those tests, for example.
-            if try String.fetchAll(db, sql: "PRAGMA COMPILE_OPTIONS").contains("ENABLE_UPDATE_DELETE_LIMIT") {
+            if try String.fetchCursor(db, sql: "PRAGMA COMPILE_OPTIONS").contains("ENABLE_UPDATE_DELETE_LIMIT") {
                 try Person.limit(1).deleteAll(db)
                 XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\" LIMIT 1")
+                
+                try Person.order(Column("name")).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\"")
                 
                 try Person.order(Column("name")).limit(1).deleteAll(db)
                 XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\" ORDER BY \"name\" LIMIT 1")
@@ -174,6 +177,140 @@ class MutablePersistableRecordDeleteTests: GRDBTestCase {
                 
                 try Person.limit(1, offset: 2).reversed().deleteAll(db)
                 XCTAssertEqual(self.lastSQLQuery, "DELETE FROM \"persons\" LIMIT 1 OFFSET 2")
+            }
+        }
+    }
+    
+    func testJoinedRequestDelete() throws {
+        try makeDatabaseQueue().inDatabase { db in
+            struct Player: MutablePersistableRecord {
+                static let team = belongsTo(Team.self)
+                func encode(to container: inout PersistenceContainer) { preconditionFailure("should not be called") }
+            }
+            
+            struct Team: MutablePersistableRecord {
+                static let players = hasMany(Player.self)
+                func encode(to container: inout PersistenceContainer) { preconditionFailure("should not be called") }
+            }
+            
+            try db.create(table: "team") { t in
+                t.autoIncrementedPrimaryKey("id")
+            }
+            
+            try db.create(table: "player") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("teamId", .integer).references("team")
+            }
+            
+            do {
+                try Player.including(required: Player.team).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "player" WHERE "id" IN (\
+                    SELECT "player"."id" \
+                    FROM "player" \
+                    JOIN "team" ON "team"."id" = "player"."teamId")
+                    """)
+            }
+            do {
+                let alias = TableAlias(name: "p")
+                try Player.aliased(alias).including(required: Player.team).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "player" WHERE "id" IN (\
+                    SELECT "p"."id" \
+                    FROM "player" "p" \
+                    JOIN "team" ON "team"."id" = "p"."teamId")
+                    """)
+            }
+            do {
+                try Team.having(Team.players.isEmpty).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "team" WHERE "id" IN (\
+                    SELECT "team"."id" \
+                    FROM "team" \
+                    LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
+                    GROUP BY "team"."id" \
+                    HAVING COUNT(DISTINCT "player"."id") = 0)
+                    """)
+            }
+            do {
+                try Team.including(all: Team.players).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "team"
+                    """)
+            }
+        }
+    }
+    
+    func testGroupedRequestDelete() throws {
+        try makeDatabaseQueue().inDatabase { db in
+            struct Player: MutablePersistableRecord {
+                func encode(to container: inout PersistenceContainer) { preconditionFailure("should not be called") }
+            }
+            struct Passport: MutablePersistableRecord {
+                func encode(to container: inout PersistenceContainer) { preconditionFailure("should not be called") }
+            }
+            try db.create(table: "player") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("score", .integer)
+            }
+            try db.create(table: "passport") { t in
+                t.column("countryCode", .text).notNull()
+                t.column("citizenId", .integer).notNull()
+                t.primaryKey(["countryCode", "citizenId"])
+            }
+            do {
+                try Player.all().groupByPrimaryKey().deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "player" WHERE "id" IN (\
+                    SELECT "id" \
+                    FROM "player" \
+                    GROUP BY "id")
+                    """)
+            }
+            do {
+                try Player.all().group(Column.rowID + 1).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "player" WHERE "id" IN (\
+                    SELECT "id" \
+                    FROM "player" \
+                    GROUP BY "rowid" + 1)
+                    """)
+            }
+            do {
+                try Player.all().group(-Column("id")).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "player" WHERE "id" IN (\
+                    SELECT "id" \
+                    FROM "player" \
+                    GROUP BY -"id")
+                    """)
+            }
+            do {
+                try Player.all().group(Column.rowID).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "player" WHERE "id" IN (\
+                    SELECT "id" \
+                    FROM "player" \
+                    GROUP BY "rowid")
+                    """)
+            }
+            do {
+                try Passport.all().groupByPrimaryKey().deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "passport" WHERE "rowid" IN (\
+                    SELECT "rowid" \
+                    FROM "passport" \
+                    GROUP BY "rowid")
+                    """)
+            }
+            do {
+                try Passport.all().group(Column.rowID).deleteAll(db)
+                XCTAssertEqual(self.lastSQLQuery, """
+                    DELETE FROM "passport" WHERE "rowid" IN (\
+                    SELECT "rowid" \
+                    FROM "passport" \
+                    GROUP BY "rowid")
+                    """)
             }
         }
     }

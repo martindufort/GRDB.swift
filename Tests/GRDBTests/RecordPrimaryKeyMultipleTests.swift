@@ -1,12 +1,8 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 // Citizenship has a multiple-column primary key.
-private class Citizenship : Record {
+private class Citizenship : Record, Hashable {
     var personName: String!
     var countryName: String!
     var native: Bool!
@@ -31,7 +27,7 @@ private class Citizenship : Record {
     // Record
     
     override class var databaseTableName: String {
-        return "citizenships"
+        "citizenships"
     }
     
     required init(row: Row) {
@@ -45,6 +41,18 @@ private class Citizenship : Record {
         container["personName"] = personName
         container["countryName"] = countryName
         container["native"] = native
+    }
+    
+    static func == (lhs: Citizenship, rhs: Citizenship) -> Bool {
+        lhs.personName == rhs.personName
+            && lhs.countryName == rhs.countryName
+            && lhs.native == rhs.native
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(personName)
+        hasher.combine(countryName)
+        hasher.combine(native)
     }
 }
 
@@ -73,7 +81,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testInsertWithNotNilPrimaryKeyThatDoesNotMatchAnyRowInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -84,7 +92,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testInsertWithNotNilPrimaryKeyThatMatchesARowThrowsDatabaseError() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -98,7 +106,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testInsertAfterDeleteInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -111,10 +119,10 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
-
+    
+    
     // MARK: - Update
-
+    
     func testUpdateWithNilPrimaryKeyThrowsRecordNotFound() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -129,7 +137,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testUpdateWithNotNilPrimaryKeyThatDoesNotMatchAnyRowThrowsRecordNotFound() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -144,7 +152,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testUpdateWithNotNilPrimaryKeyThatMatchesARowUpdatesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -157,7 +165,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testUpdateAfterDeleteThrowsRecordNotFound() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -174,10 +182,10 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
-
+    
+    
     // MARK: - Save
-
+    
     func testSaveWithNilPrimaryKeyThrowsDatabaseError() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -191,7 +199,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testSaveWithNotNilPrimaryKeyThatDoesNotMatchAnyRowInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -202,7 +210,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testSaveWithNotNilPrimaryKeyThatMatchesARowUpdatesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -216,7 +224,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testSaveAfterDeleteInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -229,10 +237,10 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
-
+    
+    
     // MARK: - Delete
-
+    
     func testDeleteWithNilPrimaryKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -241,7 +249,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             XCTAssertFalse(deleted)
         }
     }
-
+    
     func testDeleteWithNotNilPrimaryKeyThatDoesNotMatchAnyRowDoesNothing() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -250,7 +258,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             XCTAssertFalse(deleted)
         }
     }
-
+    
     func testDeleteWithNotNilPrimaryKeyThatMatchesARowDeletesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -263,7 +271,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             XCTAssertTrue(row == nil)
         }
     }
-
+    
     func testDeleteAfterDeleteDoesNothing() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -275,8 +283,8 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             XCTAssertFalse(deleted)
         }
     }
-
-
+    
+    
     // MARK: - Fetch With Key
     
     func testFetchCursorWithKeys() throws {
@@ -295,7 +303,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             do {
                 let cursor = try Citizenship.fetchCursor(db, keys: [["personName": record1.personName, "countryName": record1.countryName], ["personName": record2.personName, "countryName": record2.countryName]])
                 let fetchedRecords = try [cursor.next()!, cursor.next()!]
-                XCTAssertEqual(Set(fetchedRecords.map { $0.personName }), Set([record1.personName, record2.personName]))
+                XCTAssertEqual(Set(fetchedRecords.map(\.personName)), Set([record1.personName, record2.personName]))
                 XCTAssertTrue(try cursor.next() == nil) // end
             }
             
@@ -307,7 +315,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testFetchAllWithKeys() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -324,7 +332,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             do {
                 let fetchedRecords = try Citizenship.fetchAll(db, keys: [["personName": record1.personName, "countryName": record1.countryName], ["personName": record2.personName, "countryName": record2.countryName]])
                 XCTAssertEqual(fetchedRecords.count, 2)
-                XCTAssertEqual(Set(fetchedRecords.map { $0.personName }), Set([record1.personName, record2.personName]))
+                XCTAssertEqual(Set(fetchedRecords.map(\.personName)), Set([record1.personName, record2.personName]))
             }
             
             do {
@@ -334,7 +342,34 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
+    
+    func testFetchSetWithKeys() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = Citizenship(personName: "Arthur", countryName: "France", native: true)
+            try record1.insert(db)
+            let record2 = Citizenship(personName: "Barbara", countryName: "France", native: false)
+            try record2.insert(db)
+            
+            do {
+                let fetchedRecords = try Citizenship.fetchSet(db, keys: [])
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let fetchedRecords = try Citizenship.fetchSet(db, keys: [["personName": record1.personName, "countryName": record1.countryName], ["personName": record2.personName, "countryName": record2.countryName]])
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map(\.personName)), Set([record1.personName, record2.personName]))
+            }
+            
+            do {
+                let fetchedRecords = try Citizenship.fetchSet(db, keys: [["personName": record1.personName, "countryName": record1.countryName], ["personName": nil, "countryName": nil]])
+                XCTAssertEqual(fetchedRecords.count, 1)
+                XCTAssertEqual(fetchedRecords.first!.personName, record1.personName!)
+            }
+        }
+    }
+    
     func testFetchOneWithKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -348,7 +383,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"citizenships\" WHERE (\"personName\" = '\(record.personName!)') AND (\"countryName\" = '\(record.countryName!)')")
         }
     }
-
+    
     
     // MARK: - Fetch With Key Request
     
@@ -368,7 +403,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             do {
                 let cursor = try Citizenship.filter(keys: [["personName": record1.personName, "countryName": record1.countryName], ["personName": record2.personName, "countryName": record2.countryName]]).fetchCursor(db)
                 let fetchedRecords = try [cursor.next()!, cursor.next()!]
-                XCTAssertEqual(Set(fetchedRecords.map { $0.personName }), Set([record1.personName, record2.personName]))
+                XCTAssertEqual(Set(fetchedRecords.map(\.personName)), Set([record1.personName, record2.personName]))
                 XCTAssertTrue(try cursor.next() == nil) // end
             }
             
@@ -397,7 +432,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             do {
                 let fetchedRecords = try Citizenship.filter(keys: [["personName": record1.personName, "countryName": record1.countryName], ["personName": record2.personName, "countryName": record2.countryName]]).fetchAll(db)
                 XCTAssertEqual(fetchedRecords.count, 2)
-                XCTAssertEqual(Set(fetchedRecords.map { $0.personName }), Set([record1.personName, record2.personName]))
+                XCTAssertEqual(Set(fetchedRecords.map(\.personName)), Set([record1.personName, record2.personName]))
             }
             
             do {
@@ -407,7 +442,34 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             }
         }
     }
-
+    
+    func testFetchSetWithKeysRequest() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = Citizenship(personName: "Arthur", countryName: "France", native: true)
+            try record1.insert(db)
+            let record2 = Citizenship(personName: "Barbara", countryName: "France", native: false)
+            try record2.insert(db)
+            
+            do {
+                let fetchedRecords = try Citizenship.filter(keys: []).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let fetchedRecords = try Citizenship.filter(keys: [["personName": record1.personName, "countryName": record1.countryName], ["personName": record2.personName, "countryName": record2.countryName]]).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map(\.personName)), Set([record1.personName, record2.personName]))
+            }
+            
+            do {
+                let fetchedRecords = try Citizenship.filter(keys: [["personName": record1.personName, "countryName": record1.countryName], ["personName": nil, "countryName": nil]]).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 1)
+                XCTAssertEqual(fetchedRecords.first!.personName, record1.personName!)
+            }
+        }
+    }
+    
     func testFetchOneWithKeyRequest() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -429,14 +491,13 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             let request = Citizenship.orderByPrimaryKey()
-            let sqlRequest = try SQLRequest(db, request: request)
-            XCTAssertEqual(sqlRequest.sql, "SELECT * FROM \"citizenships\" ORDER BY \"personName\", \"countryName\"")
+            try assertEqualSQL(db, request, "SELECT * FROM \"citizenships\" ORDER BY \"personName\", \"countryName\"")
         }
     }
     
     
     // MARK: - Exists
-
+    
     func testExistsWithNilPrimaryKeyReturnsFalse() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -444,7 +505,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             XCTAssertFalse(try record.exists(db))
         }
     }
-
+    
     func testExistsWithNotNilPrimaryKeyThatDoesNotMatchAnyRowReturnsFalse() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -452,7 +513,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             XCTAssertFalse(try record.exists(db))
         }
     }
-
+    
     func testExistsWithNotNilPrimaryKeyThatMatchesARowReturnsTrue() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -461,7 +522,7 @@ class RecordPrimaryKeyMultipleTests: GRDBTestCase {
             XCTAssertTrue(try record.exists(db))
         }
     }
-
+    
     func testExistsAfterDeleteReturnsTrue() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in

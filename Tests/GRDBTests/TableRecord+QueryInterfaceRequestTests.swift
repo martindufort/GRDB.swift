@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 private struct Col {
     static let id = Column("id")
@@ -148,10 +144,8 @@ class TableRecordQueryInterfaceRequestTests: GRDBTestCase {
                 XCTAssertEqual(rows[1][1] as Int64, 1)
             }
             try test(Reader.select(literal: SQLLiteral(sql: ":name, id - :value", arguments: ["name": "O'Brien", "value": 1])))
-            #if swift(>=5)
             // Interpolation
             try test(Reader.select(literal: "\("O'Brien"), id - \(1)"))
-            #endif
         }
     }
     
@@ -258,6 +252,23 @@ class TableRecordQueryInterfaceRequestTests: GRDBTestCase {
         XCTAssertEqual(
             sql(dbQueue, Reader.order(abs(Col.age))),
             "SELECT * FROM \"readers\" ORDER BY ABS(\"age\")")
+        #if GRDBCUSTOMSQLITE
+        XCTAssertEqual(
+            sql(dbQueue, Reader.order(Col.age.ascNullsLast)),
+            "SELECT * FROM \"readers\" ORDER BY \"age\" ASC NULLS LAST")
+        XCTAssertEqual(
+            sql(dbQueue, Reader.order(Col.age.descNullsFirst)),
+            "SELECT * FROM \"readers\" ORDER BY \"age\" DESC NULLS FIRST")
+        #elseif !GRDBCIPHER
+        if #available(OSX 10.16, iOS 14, tvOS 14, watchOS 7, *) {
+            XCTAssertEqual(
+                sql(dbQueue, Reader.order(Col.age.ascNullsLast)),
+                "SELECT * FROM \"readers\" ORDER BY \"age\" ASC NULLS LAST")
+            XCTAssertEqual(
+                sql(dbQueue, Reader.order(Col.age.descNullsFirst)),
+                "SELECT * FROM \"readers\" ORDER BY \"age\" DESC NULLS FIRST")
+        }
+        #endif
     }
     
     func testMultipleSort() throws {

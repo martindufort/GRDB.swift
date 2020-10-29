@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1030"
+   LastUpgradeVersion = "1200"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -40,8 +40,8 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
-      codeCoverageEnabled = "YES"
-      shouldUseLaunchSchemeArgsEnv = "YES">
+      shouldUseLaunchSchemeArgsEnv = "YES"
+      codeCoverageEnabled = "YES">
       <Testables>
          <TestableReference
             skipped = "NO">
@@ -52,42 +52,8 @@
                BlueprintName = "GRDBOSXTests"
                ReferencedContainer = "container:GRDB.xcodeproj">
             </BuildableReference>
-            <SkippedTests>
-               <Test
-                  Identifier = "FetchedRecordsControllerTests/testEmptyFetchedRecordsAfterPerformFetch()">
-               </Test>
-               <Test
-                  Identifier = "FetchedRecordsControllerTests/testNoFetchedRecordsBeforeFetch()">
-               </Test>
-               <Test
-                  Identifier = "FetchedRecordsControllerTests/testNotEmptyFetchedRecordsAfterPerformFetch()">
-               </Test>
-               <Test
-                  Identifier = "FetchedRecordsControllerTests/testNotificationsOnInsertion()">
-               </Test>
-               <Test
-                  Identifier = "FetchedRecordsControllerTests/testRecordDeleted()">
-               </Test>
-               <Test
-                  Identifier = "FetchedRecordsControllerTests/testRecordInserted()">
-               </Test>
-               <Test
-                  Identifier = "FetchedRecordsControllerTests/testRecordUpdated()">
-               </Test>
-            </SkippedTests>
          </TestableReference>
       </Testables>
-      <MacroExpansion>
-         <BuildableReference
-            BuildableIdentifier = "primary"
-            BlueprintIdentifier = "DC3773F219C8CBB3004FCF85"
-            BuildableName = "GRDB.framework"
-            BlueprintName = "GRDBOSX"
-            ReferencedContainer = "container:GRDB.xcodeproj">
-         </BuildableReference>
-      </MacroExpansion>
-      <AdditionalOptions>
-      </AdditionalOptions>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"
@@ -108,8 +74,6 @@
             ReferencedContainer = "container:GRDB.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
-      <AdditionalOptions>
-      </AdditionalOptions>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

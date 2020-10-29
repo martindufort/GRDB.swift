@@ -1,23 +1,7 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 class FTS3TableBuilderTests: GRDBTestCase {
-    
-    override func setUp() {
-        super.setUp()
-        
-        dbConfiguration.trace = { [unowned self] sql in
-            // Ignore virtual table logs
-            if !sql.hasPrefix("--") {
-                self.sqlQueries.append(sql)
-            }
-        }
-    }
-    
     func testWithoutBody() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -61,12 +45,6 @@ class FTS3TableBuilderTests: GRDBTestCase {
     }
 
     func testUnicode61Tokenizer() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS3()) { t in
@@ -77,12 +55,6 @@ class FTS3TableBuilderTests: GRDBTestCase {
     }
 
     func testUnicode61TokenizerDiacriticsKeep() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS3()) { t in
@@ -102,15 +74,22 @@ class FTS3TableBuilderTests: GRDBTestCase {
             assertDidExecute(sql: "CREATE VIRTUAL TABLE \"documents\" USING fts3(tokenize=unicode61 \"remove_diacritics=2\")")
         }
     }
+    #elseif !GRDBCIPHER
+    func testUnicode61TokenizerDiacriticsRemove() throws {
+        guard #available(OSX 10.16, iOS 14, tvOS 14, watchOS 7, *) else {
+            throw XCTSkip()
+        }
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.create(virtualTable: "documents", using: FTS3()) { t in
+                t.tokenizer = .unicode61(diacritics: .remove)
+            }
+            assertDidExecute(sql: "CREATE VIRTUAL TABLE \"documents\" USING fts3(tokenize=unicode61 \"remove_diacritics=2\")")
+        }
+    }
     #endif
 
     func testUnicode61TokenizerSeparators() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS3()) { t in
@@ -121,12 +100,6 @@ class FTS3TableBuilderTests: GRDBTestCase {
     }
 
     func testUnicode61TokenizerTokenCharacters() throws {
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.create(virtualTable: "documents", using: FTS3()) { t in

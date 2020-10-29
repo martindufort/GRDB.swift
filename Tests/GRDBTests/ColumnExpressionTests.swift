@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 class ColumnExpressionTests: GRDBTestCase {
     
@@ -66,11 +62,10 @@ class ColumnExpressionTests: GRDBTestCase {
             try? player.update(db, columns: [Player.Columns.name, Player.Columns.score])
             XCTAssertEqual(lastSQLQuery, "UPDATE \"player\" SET \"name\"=\'Arthur\', \"score\"=1000 WHERE \"id\"=1")
             
-            // Test FTS3 match expression
-            let expression = try Player.Columns.name.match(FTS3Pattern(rawPattern: "foo"))
-            let sqlLiteral = expression.sqlLiteral
-            XCTAssertEqual(sqlLiteral.sql, "\"name\" MATCH ?")
-            XCTAssertEqual(sqlLiteral.arguments, ["foo"])
+            // Test compound expression
+            let expression = Player.Columns.name == "foo"
+            let request = Player.select(expression)
+            try assertEqualSQL(db, request, "SELECT \"name\" = 'foo' FROM \"player\"")
         }
     }
     
@@ -127,11 +122,10 @@ class ColumnExpressionTests: GRDBTestCase {
             try? player.update(db, columns: [Player.Columns.name, Player.Columns.score])
             XCTAssertEqual(lastSQLQuery, "UPDATE \"player\" SET \"name\"=\'Arthur\', \"score\"=1000 WHERE \"id\"=1")
             
-            // Test FTS3 match expression
-            let expression = try Player.Columns.name.match(FTS3Pattern(rawPattern: "foo"))
-            let sqlLiteral = expression.sqlLiteral
-            XCTAssertEqual(sqlLiteral.sql, "\"name\" MATCH ?")
-            XCTAssertEqual(sqlLiteral.arguments, ["foo"])
+            // Test compound expression
+            let expression = Player.Columns.name == "foo"
+            let request = Player.select(expression)
+            try assertEqualSQL(db, request, "SELECT \"name\" = 'foo' FROM \"player\"")
         }
     }
     
@@ -182,11 +176,10 @@ class ColumnExpressionTests: GRDBTestCase {
             try? player.update(db, columns: [Player.Columns.name, Player.Columns.score])
             XCTAssertEqual(lastSQLQuery, "UPDATE \"player\" SET \"full_name\"=\'Arthur\', \"score\"=1000 WHERE \"id\"=1")
             
-            // Test FTS3 match expression
-            let expression = try Player.Columns.name.match(FTS3Pattern(rawPattern: "foo"))
-            let sqlLiteral = expression.sqlLiteral
-            XCTAssertEqual(sqlLiteral.sql, "\"full_name\" MATCH ?")
-            XCTAssertEqual(sqlLiteral.arguments, ["foo"])
+            // Test compound expression
+            let expression = Player.Columns.name == "foo"
+            let request = Player.select(expression)
+            try assertEqualSQL(db, request, "SELECT \"full_name\" = 'foo' FROM \"player\"")
         }
     }
 
@@ -231,11 +224,10 @@ class ColumnExpressionTests: GRDBTestCase {
             try? player.update(db, columns: [Player.CodingKeys.name, Player.CodingKeys.score])
             XCTAssertEqual(lastSQLQuery, "UPDATE \"player\" SET \"full_name\"=\'Arthur\', \"score\"=1000 WHERE \"id\"=1")
             
-            // Test FTS3 match expression
-            let expression = try Player.CodingKeys.name.match(FTS3Pattern(rawPattern: "foo"))
-            let sqlLiteral = expression.sqlLiteral
-            XCTAssertEqual(sqlLiteral.sql, "\"full_name\" MATCH ?")
-            XCTAssertEqual(sqlLiteral.arguments, ["foo"])
+            // Test compound expression
+            let expression = Player.CodingKeys.name == "foo"
+            let request = Player.select(expression)
+            try assertEqualSQL(db, request, "SELECT \"full_name\" = 'foo' FROM \"player\"")
         }
     }
 }

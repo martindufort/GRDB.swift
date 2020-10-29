@@ -1,10 +1,6 @@
 import Foundation
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+@testable import GRDB
 
 class FetchableRecordDecodableTests: GRDBTestCase { }
 
@@ -224,9 +220,7 @@ extension FetchableRecordDecodableTests {
             
             // DatabaseValueConvertible adoption
             
-            var databaseValue: DatabaseValue {
-                fatalError("irrelevant")
-            }
+            var databaseValue: DatabaseValue { fatalError("irrelevant") }
             
             static func fromDatabaseValue(_ databaseValue: DatabaseValue) -> Value? {
                 if let string = String.fromDatabaseValue(databaseValue) {
@@ -574,7 +568,7 @@ extension FetchableRecordDecodableTests {
 
     }
     
-    // MARK: - JSON data in Detahced Rows
+    // MARK: - JSON data in Detached Rows
     
     func testDetachedRows() throws {
         struct NestedStruct : PersistableRecord, FetchableRecord, Codable {
@@ -1056,6 +1050,84 @@ extension FetchableRecordDecodableTests {
             
             let row = try Row.fetchOne(db, request)!
             test(CustomizedRecord(row: row))
+        }
+    }
+    
+    func testMissingKeys1() throws {
+        struct A: Decodable { }
+        struct B: Decodable { }
+        struct C: Decodable { }
+        struct Composed: Decodable, FetchableRecord {
+            var a: A
+            var b: B?
+            var c: C?
+        }
+        
+        // No error expected:
+        // - a is succesfully decoded because it consumes the one and unique
+        //   allowed missing key
+        // - b and c are succesfully decoded, because they are optionals, and
+        //   all optionals decode missing keys are nil. This is because GRDB
+        //   records accept rows with missing columns, and b and c may want to
+        //   decode columns.
+        _ = try RowDecoder().decode(Composed.self, from: [:])
+    }
+    
+    // This is a regression test for https://github.com/groue/GRDB.swift/issues/664
+    func testMissingKeys2() throws {
+        struct A: Decodable { }
+        struct B: Decodable { }
+        struct Composed: Decodable, FetchableRecord {
+            var a: A
+            var b: B
+        }
+        do {
+            _ = try RowDecoder().decode(Composed.self, from: [:])
+            XCTFail("Expected error")
+        } catch DecodingError.keyNotFound {
+            // a or b can not be decoded because only one key is allowed to be missing
+        }
+    }
+    
+    // Regression test for https://github.com/groue/GRDB.swift/issues/836
+    func testRootKeyDecodingError() throws {
+        struct Record: Decodable { }
+        struct Composed: Decodable, FetchableRecord {
+            var a: Record
+            var b: Record
+            var c: Record
+        }
+        try makeDatabaseQueue().read { db in
+            do {
+                // - a is present
+                // - root is b and c is missing, or the opposite (two possible user intents)
+                let row = try Row.fetchOne(db, sql: "SELECT NULL", adapter: ScopeAdapter(["a": EmptyRowAdapter()]))!
+                _ = try RowDecoder().decode(Composed.self, from: row)
+                XCTFail("Expected error")
+            } catch let DecodingError.keyNotFound(key, context) {
+                XCTAssert(["b", "c"].contains(key.stringValue))
+                XCTAssertEqual(context.debugDescription, "No such key: b or c")
+            }
+            do {
+                // - b is present
+                // - root is a and c is missing, or the opposite (two possible user intents)
+                let row = try Row.fetchOne(db, sql: "SELECT NULL", adapter: ScopeAdapter(["b": EmptyRowAdapter()]))!
+                _ = try RowDecoder().decode(Composed.self, from: row)
+                XCTFail("Expected error")
+            } catch let DecodingError.keyNotFound(key, context) {
+                XCTAssert(["a", "c"].contains(key.stringValue))
+                XCTAssertEqual(context.debugDescription, "No such key: a or c")
+            }
+            do {
+                // - c is present
+                // - root is a and b is missing, or the opposite (two possible user intents)
+                let row = try Row.fetchOne(db, sql: "SELECT NULL", adapter: ScopeAdapter(["c": EmptyRowAdapter()]))!
+                _ = try RowDecoder().decode(Composed.self, from: row)
+                XCTFail("Expected error")
+            } catch let DecodingError.keyNotFound(key, context) {
+                XCTAssert(["a", "b"].contains(key.stringValue))
+                XCTAssertEqual(context.debugDescription, "No such key: a or b")
+            }
         }
     }
 }

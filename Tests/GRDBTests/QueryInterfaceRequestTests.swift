@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 private struct Col {
     static let id = Column("id")
@@ -18,15 +14,19 @@ private struct Reader : TableRecord {
 private let tableRequest = Reader.all()
 
 class QueryInterfaceRequestTests: GRDBTestCase {
-
-    var collation: DatabaseCollation!
+    
+    let collation = DatabaseCollation("localized_case_insensitive") { (lhs, rhs) in
+        return (lhs as NSString).localizedCaseInsensitiveCompare(rhs)
+    }
+    
+    override func setUp() {
+        super.setUp()
+        dbConfiguration.prepareDatabase { db in
+            db.add(collation: self.collation)
+        }
+    }
     
     override func setup(_ dbWriter: DatabaseWriter) throws {
-        collation = DatabaseCollation("localized_case_insensitive") { (lhs, rhs) in
-            return (lhs as NSString).localizedCaseInsensitiveCompare(rhs)
-        }
-        dbWriter.add(collation: collation)
-        
         var migrator = DatabaseMigrator()
         migrator.registerMigration("createReaders") { db in
             try db.execute(sql: """
@@ -44,7 +44,7 @@ class QueryInterfaceRequestTests: GRDBTestCase {
     func testSimpleRequestDoesNotUseAnyRowAdapter() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
-            let (_, adapter) = try Reader.all().prepare(db, forSingleResult: false)
+            let adapter = try Reader.all().makePreparedRequest(db, forSingleResult: false).adapter
             XCTAssertNil(adapter)
         }
     }
@@ -88,10 +88,10 @@ class QueryInterfaceRequestTests: GRDBTestCase {
             }
         }
     }
-
-
+    
+    
     // MARK: - Count
-
+    
     func testFetchCount() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -135,10 +135,10 @@ class QueryInterfaceRequestTests: GRDBTestCase {
             XCTAssertEqual(lastSQLQuery, "SELECT COUNT(*) FROM (SELECT MAX(\"age\") FROM \"readers\" GROUP BY \"name\")")
         }
     }
-
-
+    
+    
     // MARK: - Select
-
+    
     func testSelectLiteral() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -155,7 +155,7 @@ class QueryInterfaceRequestTests: GRDBTestCase {
             XCTAssertEqual(rows[1][1] as Int64, 1)
         }
     }
-
+    
     func testSelectLiteralWithPositionalArguments() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -172,7 +172,7 @@ class QueryInterfaceRequestTests: GRDBTestCase {
             XCTAssertEqual(rows[1][1] as Int64, 1)
         }
     }
-
+    
     func testSelectLiteralWithNamedArguments() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -205,10 +205,8 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                 XCTAssertEqual(rows[1][1] as Int64, 1)
             }
             try test(tableRequest.select(literal: SQLLiteral(sql: ":name, id - :value", arguments: ["name": "O'Brien", "value": 1])))
-            #if swift(>=5)
             // Interpolation
             try test(tableRequest.select(literal: "\("O'Brien"), id - \(1)"))
-            #endif
         }
     }
     
@@ -228,7 +226,7 @@ class QueryInterfaceRequestTests: GRDBTestCase {
             XCTAssertEqual(rows[1][1] as Int64, 1)
         }
     }
-
+    
     func testSelectionCustomKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -278,6 +276,46 @@ class QueryInterfaceRequestTests: GRDBTestCase {
         }
     }
     
+    func testAnnotatedWithForeignColumn() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.create(table: "author") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("name", .text)
+            }
+            try db.create(table: "book") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("authorId", .integer).references("author")
+            }
+            try db.execute(sql: """
+                INSERT INTO author(id, name) VALUES (1, 'Arthur');
+                INSERT INTO book(id, authorId) VALUES (2, 1);
+                """)
+            struct Author: TableRecord { }
+            struct Book: TableRecord {
+                static let author = belongsTo(Author.self)
+            }
+            
+            let alias = TableAlias()
+            let request = Book
+                .annotated(with: alias[Column("name")])
+                .joining(required: Book.author.aliased(alias))
+            let rows = try Row.fetchCursor(db, request)
+            while let row = try rows.next() {
+                // Just some sanity checks that the "author"."name" SQL column is
+                // simply exposed as "name" in Swift code:
+                XCTAssertEqual(row, ["id":2, "authorId":1, "name":"Arthur"])
+                XCTAssertEqual(Set(row.columnNames), ["id", "authorId", "name"])
+                XCTAssertEqual(row["name"], "Arthur")
+            }
+            XCTAssertEqual(lastSQLQuery, """
+                SELECT "book".*, "author"."name" \
+                FROM "book" \
+                JOIN "author" ON "author"."id" = "book"."authorId"
+                """)
+        }
+    }
+    
     func testMultipleSelect() throws {
         let dbQueue = try makeDatabaseQueue()
         XCTAssertEqual(
@@ -315,7 +353,6 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                             .fetchOne(db)!
                         XCTAssertEqual(value, "O'Brien")
                     }
-                    #if swift(>=5.0)
                     // SQLLiteral with interpolation
                     do {
                         let value = try Reader
@@ -323,7 +360,6 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                             .fetchOne(db)!
                         XCTAssertEqual(value, "O'Brien")
                     }
-                    #endif
                     // raw sql without argument
                     do {
                         let value = try Reader
@@ -358,7 +394,6 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                             .fetchOne(db)!
                         XCTAssertEqual(value, "O'Brien")
                     }
-                    #if swift(>=5.0)
                     // SQLLiteral with interpolation
                     do {
                         let value = try Reader
@@ -367,7 +402,6 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                             .fetchOne(db)!
                         XCTAssertEqual(value, "O'Brien")
                     }
-                    #endif
                     // raw sql without argument
                     do {
                         let value = try Reader
@@ -404,7 +438,6 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                             .fetchOne(db)!
                         XCTAssertEqual(value, ["name": "Arthur", "age": 22])
                     }
-                    #if swift(>=5.0)
                     // SQLLiteral with interpolation
                     do {
                         let value = try Reader
@@ -412,7 +445,6 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                             .fetchOne(db)!
                         XCTAssertEqual(value, ["name": "O'Brien", "age": 22])
                     }
-                    #endif
                     // raw sql with named argument
                     do {
                         let value = try Reader
@@ -447,7 +479,6 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                             .fetchOne(db)!
                         XCTAssertEqual(value, ["name": "Arthur", "age": 22])
                     }
-                    #if swift(>=5.0)
                     // SQLLiteral with interpolation
                     do {
                         let value = try Reader
@@ -456,7 +487,6 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                             .fetchOne(db)!
                         XCTAssertEqual(value, ["name": "O'Brien", "age": 22])
                     }
-                    #endif
                     // raw sql with positional argument
                     do {
                         let value = try Reader
@@ -467,6 +497,56 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                     }
                 }
             }
+        }
+    }
+    
+    // This test passes if this method compiles
+    func testSelectAsTypeInference() {
+        _ = Reader.select(Col.name) as QueryInterfaceRequest<String>
+        _ = Reader.select([Col.name]) as QueryInterfaceRequest<String>
+        _ = Reader.select(sql: "name") as QueryInterfaceRequest<String>
+        _ = Reader.select(literal: SQLLiteral(sql: "name")) as QueryInterfaceRequest<String>
+        _ = Reader.all().select(Col.name) as QueryInterfaceRequest<String>
+        _ = Reader.all().select([Col.name]) as QueryInterfaceRequest<String>
+        _ = Reader.all().select(sql: "name") as QueryInterfaceRequest<String>
+        _ = Reader.all().select(literal: SQLLiteral(sql: "name")) as QueryInterfaceRequest<String>
+        
+        func makeRequest() -> QueryInterfaceRequest<String> {
+            Reader.select(Col.name)
+        }
+        
+        // Those should be, without any ambiguuity, requests of Reader.
+        do {
+            let request = Reader.select(Col.name)
+            _ = request as QueryInterfaceRequest<Reader>
+        }
+        do {
+            let request = Reader.select([Col.name])
+            _ = request as QueryInterfaceRequest<Reader>
+        }
+        do {
+            let request = Reader.select(sql: "name")
+            _ = request as QueryInterfaceRequest<Reader>
+        }
+        do {
+            let request = Reader.select(literal: SQLLiteral(sql: "name"))
+            _ = request as QueryInterfaceRequest<Reader>
+        }
+        do {
+            let request = Reader.all().select(Col.name)
+            _ = request as QueryInterfaceRequest<Reader>
+        }
+        do {
+            let request = Reader.all().select([Col.name])
+            _ = request as QueryInterfaceRequest<Reader>
+        }
+        do {
+            let request = Reader.all().select(sql: "name")
+            _ = request as QueryInterfaceRequest<Reader>
+        }
+        do {
+            let request = Reader.all().select(literal: SQLLiteral(sql: "name"))
+            _ = request as QueryInterfaceRequest<Reader>
         }
     }
     
@@ -526,19 +606,34 @@ class QueryInterfaceRequestTests: GRDBTestCase {
                 .filter(sql: "name = :name", arguments: ["name": "arthur"])),
             "SELECT * FROM \"readers\" WHERE (age > 20) AND (name = 'arthur')")
     }
-
+    
     func testFilter() throws {
         let dbQueue = try makeDatabaseQueue()
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter(true)),
             "SELECT * FROM \"readers\" WHERE 1")
     }
-
+    
     func testMultipleFilter() throws {
         let dbQueue = try makeDatabaseQueue()
         XCTAssertEqual(
             sql(dbQueue, tableRequest.filter(true).filter(false)),
             "SELECT * FROM \"readers\" WHERE 1 AND 0")
+    }
+    
+    // Regression test for https://github.com/groue/GRDB.swift/issues/812
+    func testFilterOnView() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.write { db in
+            try db.execute(sql: "CREATE VIEW v AS SELECT * FROM readers")
+            struct ViewRecord: TableRecord, FetchableRecord, Decodable {
+                static let databaseTableName = "v"
+            }
+            _ = try ViewRecord.filter(Column("id") == 1).fetchOne(db)
+            XCTAssertEqual(
+                lastSQLQuery,
+                "SELECT * FROM \"v\" WHERE \"id\" = 1 LIMIT 1")
+        }
     }
     
     
@@ -617,7 +712,7 @@ class QueryInterfaceRequestTests: GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         XCTAssertEqual(
             sql(dbQueue, tableRequest.group(Col.name).having(min(Col.age) > 18).having(max(Col.age) < 50)),
-                "SELECT * FROM \"readers\" GROUP BY \"name\" HAVING (MIN(\"age\") > 18) AND (MAX(\"age\") < 50)")
+            "SELECT * FROM \"readers\" GROUP BY \"name\" HAVING (MIN(\"age\") > 18) AND (MAX(\"age\") < 50)")
     }
     
     
@@ -661,6 +756,23 @@ class QueryInterfaceRequestTests: GRDBTestCase {
         XCTAssertEqual(
             sql(dbQueue, tableRequest.order(abs(Col.age))),
             "SELECT * FROM \"readers\" ORDER BY ABS(\"age\")")
+        #if GRDBCUSTOMSQLITE
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.order(Col.age.ascNullsLast)),
+            "SELECT * FROM \"readers\" ORDER BY \"age\" ASC NULLS LAST")
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.order(Col.age.descNullsFirst)),
+            "SELECT * FROM \"readers\" ORDER BY \"age\" DESC NULLS FIRST")
+        #elseif !GRDBCIPHER
+        if #available(OSX 10.16, iOS 14, tvOS 14, watchOS 7, *) {
+            XCTAssertEqual(
+                sql(dbQueue, tableRequest.order(Col.age.ascNullsLast)),
+                "SELECT * FROM \"readers\" ORDER BY \"age\" ASC NULLS LAST")
+            XCTAssertEqual(
+                sql(dbQueue, tableRequest.order(Col.age.descNullsFirst)),
+                "SELECT * FROM \"readers\" ORDER BY \"age\" DESC NULLS FIRST")
+        }
+        #endif
     }
     
     func testSortWithCollation() throws {
@@ -674,6 +786,23 @@ class QueryInterfaceRequestTests: GRDBTestCase {
         XCTAssertEqual(
             sql(dbQueue, tableRequest.order(Col.name.collating(collation))),
             "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE localized_case_insensitive")
+        #if GRDBCUSTOMSQLITE
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.order(Col.name.collating(.nocase).ascNullsLast)),
+            "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE NOCASE ASC NULLS LAST")
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.order(Col.name.collating(.nocase).descNullsFirst)),
+            "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE NOCASE DESC NULLS FIRST")
+        #elseif !GRDBCIPHER
+        if #available(OSX 10.16, iOS 14, tvOS 14, watchOS 7, *) {
+            XCTAssertEqual(
+                sql(dbQueue, tableRequest.order(Col.name.collating(.nocase).ascNullsLast)),
+                "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE NOCASE ASC NULLS LAST")
+            XCTAssertEqual(
+                sql(dbQueue, tableRequest.order(Col.name.collating(.nocase).descNullsFirst)),
+                "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE NOCASE DESC NULLS FIRST")
+        }
+        #endif
     }
     
     func testMultipleSort() throws {
@@ -706,6 +835,23 @@ class QueryInterfaceRequestTests: GRDBTestCase {
         XCTAssertEqual(
             sql(dbQueue, tableRequest.order(abs(Col.age)).reversed()),
             "SELECT * FROM \"readers\" ORDER BY ABS(\"age\") DESC")
+        #if GRDBCUSTOMSQLITE
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.order(Col.age.descNullsFirst).reversed()),
+            "SELECT * FROM \"readers\" ORDER BY \"age\" ASC NULLS LAST")
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.order(Col.age.ascNullsLast).reversed()),
+            "SELECT * FROM \"readers\" ORDER BY \"age\" DESC NULLS FIRST")
+        #elseif !GRDBCIPHER
+        if #available(OSX 10.16, iOS 14, tvOS 14, watchOS 7, *) {
+            XCTAssertEqual(
+                sql(dbQueue, tableRequest.order(Col.age.descNullsFirst).reversed()),
+                "SELECT * FROM \"readers\" ORDER BY \"age\" ASC NULLS LAST")
+            XCTAssertEqual(
+                sql(dbQueue, tableRequest.order(Col.age.ascNullsLast).reversed()),
+                "SELECT * FROM \"readers\" ORDER BY \"age\" DESC NULLS FIRST")
+        }
+        #endif
     }
     
     func testReverseWithCollation() throws {
@@ -719,6 +865,23 @@ class QueryInterfaceRequestTests: GRDBTestCase {
         XCTAssertEqual(
             sql(dbQueue, tableRequest.order(Col.name.collating(collation)).reversed()),
             "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE localized_case_insensitive DESC")
+        #if GRDBCUSTOMSQLITE
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.order(Col.name.collating(.nocase).ascNullsLast).reversed()),
+            "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE NOCASE DESC NULLS FIRST")
+        XCTAssertEqual(
+            sql(dbQueue, tableRequest.order(Col.name.collating(.nocase).descNullsFirst).reversed()),
+            "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE NOCASE ASC NULLS LAST")
+        #elseif !GRDBCIPHER
+        if #available(OSX 10.16, iOS 14, tvOS 14, watchOS 7, *) {
+            XCTAssertEqual(
+                sql(dbQueue, tableRequest.order(Col.name.collating(.nocase).ascNullsLast).reversed()),
+                "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE NOCASE DESC NULLS FIRST")
+            XCTAssertEqual(
+                sql(dbQueue, tableRequest.order(Col.name.collating(.nocase).descNullsFirst).reversed()),
+                "SELECT * FROM \"readers\" ORDER BY \"name\" COLLATE NOCASE ASC NULLS LAST")
+        }
+        #endif
     }
     
     func testMultipleReverse() throws {
@@ -749,5 +912,70 @@ class QueryInterfaceRequestTests: GRDBTestCase {
         XCTAssertEqual(
             sql(dbQueue, tableRequest.limit(1, offset: 2).limit(3)),
             "SELECT * FROM \"readers\" LIMIT 3")
+    }
+    
+    // MARK: - FetchOne Optimization
+    
+    func testFetchOneLimitOptimization() throws {
+        // Test that we avoid emitting "LIMIT 1" when possible
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.read { db in
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(key: 1))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE \"id\" = 1")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("id") == 1))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE \"id\" = 1")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("id") == nil))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE \"id\" IS NULL")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("name") == "Arthur"))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE \"name\" = \'Arthur\' LIMIT 1")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("id") == 1 && Column("name") == "Arthur"))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE (\"id\" = 1) AND (\"name\" = \'Arthur\')")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("id") == 1).filter(Column("name") == "Arthur"))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE (\"id\" = 1) AND (\"name\" = \'Arthur\')")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("id")))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE \"id\" LIMIT 1")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("id") != 1))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE \"id\" <> 1 LIMIT 1")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("id") == 1 && Column("id") == 2))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE (\"id\" = 1) AND (\"id\" = 2)")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.filter(Column("id") == 1 || Column("id") == 2))
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" WHERE (\"id\" = 1) OR (\"id\" = 2) LIMIT 1")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.select(max(Column("id"))))
+                XCTAssertEqual(lastSQLQuery, "SELECT MAX(\"id\") FROM \"readers\"")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.select(min(Column("age")).forKey("minAge"), max(Column("age")).forKey("maxAge")))
+                XCTAssertEqual(lastSQLQuery, "SELECT MIN(\"age\") AS \"minAge\", MAX(\"age\") AS \"maxAge\" FROM \"readers\"")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.select(max(Column("age") + 1)))
+                XCTAssertEqual(lastSQLQuery, "SELECT MAX(\"age\" + 1) FROM \"readers\"")
+            }
+            do {
+                _ = try Row.fetchOne(db, tableRequest.select(max(Column("age")) + 1))
+                XCTAssertEqual(lastSQLQuery, "SELECT MAX(\"age\") + 1 FROM \"readers\"")
+            }
+        }
     }
 }

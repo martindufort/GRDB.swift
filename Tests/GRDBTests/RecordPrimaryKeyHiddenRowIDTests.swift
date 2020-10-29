@@ -1,12 +1,8 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 // Person has a RowID primary key, and a overriden insert() method.
-private class Person : Record {
+private class Person : Record, Hashable {
     var id: Int64!
     var name: String!
     var age: Int?
@@ -32,11 +28,11 @@ private class Person : Record {
     // Record
     
     override static var databaseSelection: [SQLSelectable] {
-        return [AllColumns(), Column.rowID]
+        [AllColumns(), Column.rowID]
     }
     
     override class var databaseTableName: String {
-        return "persons"
+        "persons"
     }
     
     required init(row: Row) {
@@ -66,6 +62,20 @@ private class Person : Record {
     override func didInsert(with rowID: Int64, for column: String?) {
         self.id = rowID
     }
+    
+    static func == (lhs: Person, rhs: Person) -> Bool {
+        lhs.id == rhs.id
+            && lhs.name == rhs.name
+            && lhs.age == rhs.age
+            && lhs.creationDate == rhs.creationDate
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(name)
+        hasher.combine(age)
+        hasher.combine(creationDate)
+    }
 }
 
 class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
@@ -91,7 +101,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testRollbackedInsertWithNilPrimaryKeyDoesNotResetPrimaryKey() throws {
         let dbQueue = try makeDatabaseQueue()
         let record = Person(name: "Arthur")
@@ -107,7 +117,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
         // This is debatable, actually.
         XCTAssertTrue(record.id != nil)
     }
-
+    
     func testInsertWithNotNilPrimaryKeyThatDoesNotMatchAnyRowInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -118,7 +128,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testRollbackedInsertWithNotNilPrimaryKeyDoeNotResetPrimaryKey() throws {
         let dbQueue = try makeDatabaseQueue()
         let record = Person(id: 123456, name: "Arthur")
@@ -129,7 +139,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
         }
         XCTAssertEqual(record.id!, 123456)
     }
-
+    
     func testInsertWithNotNilPrimaryKeyThatMatchesARowThrowsDatabaseError() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -143,7 +153,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
         }
     }
-
+    
     func testInsertAfterDeleteInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -156,10 +166,10 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
-
+    
+    
     // MARK: - Update
-
+    
     func testUpdateWithNilPrimaryKeyThrowsRecordNotFound() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -174,7 +184,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
         }
     }
-
+    
     func testUpdateWithNotNilPrimaryKeyThatDoesNotMatchAnyRowThrowsRecordNotFound() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -189,7 +199,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
         }
     }
-
+    
     func testUpdateWithNotNilPrimaryKeyThatMatchesARowUpdatesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -202,7 +212,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testUpdateAfterDeleteThrowsRecordNotFound() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -219,10 +229,10 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
         }
     }
-
-
+    
+    
     // MARK: - Save
-
+    
     func testSaveWithNilPrimaryKeyInsertsARowAndSetsPrimaryKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -235,7 +245,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testSaveWithNotNilPrimaryKeyThatDoesNotMatchAnyRowInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -246,8 +256,8 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
-
+    
+    
     func testSaveWithNotNilPrimaryKeyThatMatchesARowUpdatesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -261,7 +271,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testSaveAfterDeleteInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -274,10 +284,10 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
-
+    
+    
     // MARK: - Delete
-
+    
     func testDeleteWithNilPrimaryKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -286,7 +296,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertFalse(deleted)
         }
     }
-
+    
     func testDeleteWithNotNilPrimaryKeyThatDoesNotMatchAnyRowDoesNothing() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -295,7 +305,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertFalse(deleted)
         }
     }
-
+    
     func testDeleteWithNotNilPrimaryKeyThatMatchesARowDeletesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -308,7 +318,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertTrue(row == nil)
         }
     }
-
+    
     func testDeleteAfterDeleteDoesNothing() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -320,8 +330,8 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertFalse(deleted)
         }
     }
-
-
+    
+    
     // MARK: - Fetch With Key
     
     func testFetchCursorWithKeys() throws {
@@ -340,7 +350,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             do {
                 let cursor = try Person.fetchCursor(db, keys: [["rowid": record1.id], ["rowid": record2.id]])
                 let fetchedRecords = try [cursor.next()!, cursor.next()!]
-                XCTAssertEqual(Set(fetchedRecords.map { $0.id }), Set([record1.id, record2.id]))
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set([record1.id, record2.id]))
                 XCTAssertTrue(try cursor.next() == nil) // end
             }
             
@@ -352,7 +362,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
         }
     }
-
+    
     func testFetchAllWithKeys() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -369,7 +379,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             do {
                 let fetchedRecords = try Person.fetchAll(db, keys: [["rowid": record1.id], ["rowid": record2.id]])
                 XCTAssertEqual(fetchedRecords.count, 2)
-                XCTAssertEqual(Set(fetchedRecords.map { $0.id }), Set([record1.id, record2.id]))
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set([record1.id, record2.id]))
             }
             
             do {
@@ -379,7 +389,34 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
         }
     }
-
+    
+    func testFetchSetWithKeys() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = Person(name: "Arthur")
+            try record1.insert(db)
+            let record2 = Person(name: "Barbara")
+            try record2.insert(db)
+            
+            do {
+                let fetchedRecords = try Person.fetchSet(db, keys: [])
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let fetchedRecords = try Person.fetchSet(db, keys: [["rowid": record1.id], ["rowid": record2.id]])
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set([record1.id, record2.id]))
+            }
+            
+            do {
+                let fetchedRecords = try Person.fetchSet(db, keys: [["rowid": record1.id], ["rowid": nil]])
+                XCTAssertEqual(fetchedRecords.count, 1)
+                XCTAssertEqual(fetchedRecords.first!.id, record1.id!)
+            }
+        }
+    }
+    
     func testFetchOneWithKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -394,7 +431,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertEqual(lastSQLQuery, "SELECT *, \"rowid\" FROM \"persons\" WHERE \"rowid\" = \(record.id!)")
         }
     }
-
+    
     
     // MARK: - Fetch With Key Request
     
@@ -414,7 +451,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             do {
                 let cursor = try Person.filter(keys: [["rowid": record1.id], ["rowid": record2.id]]).fetchCursor(db)
                 let fetchedRecords = try [cursor.next()!, cursor.next()!]
-                XCTAssertEqual(Set(fetchedRecords.map { $0.id }), Set([record1.id, record2.id]))
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set([record1.id, record2.id]))
                 XCTAssertTrue(try cursor.next() == nil) // end
             }
             
@@ -443,11 +480,38 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             do {
                 let fetchedRecords = try Person.filter(keys: [["rowid": record1.id], ["rowid": record2.id]]).fetchAll(db)
                 XCTAssertEqual(fetchedRecords.count, 2)
-                XCTAssertEqual(Set(fetchedRecords.map { $0.id }), Set([record1.id, record2.id]))
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set([record1.id, record2.id]))
             }
             
             do {
                 let fetchedRecords = try Person.filter(keys: [["rowid": record1.id], ["rowid": nil]]).fetchAll(db)
+                XCTAssertEqual(fetchedRecords.count, 1)
+                XCTAssertEqual(fetchedRecords.first!.id, record1.id!)
+            }
+        }
+    }
+    
+    func testFetchSetWithKeysRequest() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = Person(name: "Arthur")
+            try record1.insert(db)
+            let record2 = Person(name: "Barbara")
+            try record2.insert(db)
+            
+            do {
+                let fetchedRecords = try Person.filter(keys: []).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let fetchedRecords = try Person.filter(keys: [["rowid": record1.id], ["rowid": record2.id]]).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set([record1.id, record2.id]))
+            }
+            
+            do {
+                let fetchedRecords = try Person.filter(keys: [["rowid": record1.id], ["rowid": nil]]).fetchSet(db)
                 XCTAssertEqual(fetchedRecords.count, 1)
                 XCTAssertEqual(fetchedRecords.first!.id, record1.id!)
             }
@@ -476,8 +540,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             let request = Person.orderByPrimaryKey()
-            let sqlRequest = try SQLRequest(db, request: request)
-            XCTAssertEqual(sqlRequest.sql, "SELECT *, \"rowid\" FROM \"persons\" ORDER BY \"rowid\"")
+            try assertEqualSQL(db, request, "SELECT *, \"rowid\" FROM \"persons\" ORDER BY \"rowid\"")
         }
     }
     
@@ -502,12 +565,12 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
                 let ids = [record1.id!, record2.id!]
                 let cursor = try Person.fetchCursor(db, keys: ids)
                 let fetchedRecords = try [cursor.next()!, cursor.next()!]
-                XCTAssertEqual(Set(fetchedRecords.map { $0.id }), Set(ids))
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set(ids))
                 XCTAssertTrue(try cursor.next() == nil) // end
             }
         }
     }
-
+    
     func testFetchAllWithPrimaryKeys() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -526,11 +589,34 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
                 let ids = [record1.id!, record2.id!]
                 let fetchedRecords = try Person.fetchAll(db, keys: ids)
                 XCTAssertEqual(fetchedRecords.count, 2)
-                XCTAssertEqual(Set(fetchedRecords.map { $0.id }), Set(ids))
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set(ids))
             }
         }
     }
-
+    
+    func testFetchSetWithPrimaryKeys() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = Person(name: "Arthur")
+            try record1.insert(db)
+            let record2 = Person(name: "Barbara")
+            try record2.insert(db)
+            
+            do {
+                let ids: [Int64] = []
+                let fetchedRecords = try Person.fetchSet(db, keys: ids)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let ids = [record1.id!, record2.id!]
+                let fetchedRecords = try Person.fetchSet(db, keys: ids)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set(ids))
+            }
+        }
+    }
+    
     func testFetchOneWithPrimaryKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -553,7 +639,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
         }
     }
-
+    
     
     // MARK: - Fetch With Primary Key Request
     
@@ -575,7 +661,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
                 let ids = [record1.id!, record2.id!]
                 let cursor = try Person.filter(keys: ids).fetchCursor(db)
                 let fetchedRecords = try [cursor.next()!, cursor.next()!]
-                XCTAssertEqual(Set(fetchedRecords.map { $0.id }), Set(ids))
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set(ids))
                 XCTAssertTrue(try cursor.next() == nil) // end
             }
         }
@@ -599,7 +685,30 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
                 let ids = [record1.id!, record2.id!]
                 let fetchedRecords = try Person.filter(keys: ids).fetchAll(db)
                 XCTAssertEqual(fetchedRecords.count, 2)
-                XCTAssertEqual(Set(fetchedRecords.map { $0.id }), Set(ids))
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set(ids))
+            }
+        }
+    }
+    
+    func testFetchSetWithPrimaryKeysRequest() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = Person(name: "Arthur")
+            try record1.insert(db)
+            let record2 = Person(name: "Barbara")
+            try record2.insert(db)
+            
+            do {
+                let ids: [Int64] = []
+                let fetchedRecords = try Person.filter(keys: ids).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let ids = [record1.id!, record2.id!]
+                let fetchedRecords = try Person.filter(keys: ids).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map(\.id)), Set(ids))
             }
         }
     }
@@ -626,10 +735,10 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             }
         }
     }
-
-
+    
+    
     // MARK: - Exists
-
+    
     func testExistsWithNilPrimaryKeyReturnsFalse() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -637,7 +746,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertFalse(try record.exists(db))
         }
     }
-
+    
     func testExistsWithNotNilPrimaryKeyThatDoesNotMatchAnyRowReturnsFalse() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -645,7 +754,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertFalse(try record.exists(db))
         }
     }
-
+    
     func testExistsWithNotNilPrimaryKeyThatMatchesARowReturnsTrue() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -654,7 +763,7 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertTrue(try record.exists(db))
         }
     }
-
+    
     func testExistsAfterDeleteReturnsTrue() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -664,8 +773,8 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertFalse(try record.exists(db))
         }
     }
-
-
+    
+    
     // MARK: - RowID
     
     func testRowIdIsSelectedByDefault() throws {
@@ -694,33 +803,5 @@ class RecordPrimaryKeyHiddenRowIDTests : GRDBTestCase {
             XCTAssertTrue(try Person.order(sql: "rowid").fetchOne(db)!.id != nil)
             XCTAssertTrue(try Person.limit(1).fetchOne(db)!.id != nil)
         }
-    }
-
-
-    // MARK: - FetchedRecordsController
-
-    func testFetchedRecordsController() throws {
-        let dbQueue = try makeDatabaseQueue()
-        let person = Person(name: "Arthur")
-        try dbQueue.inDatabase { db in
-            try person.insert(db)
-        }
-        
-        let expectation = self.expectation(description: "expectation")
-        let controller =
-            try FetchedRecordsController<Person>(dbQueue, request: Person.all())
-        var update = false
-        controller.trackChanges(
-            onChange: { (_, _, change) in if case .update = change { update = true /* identification by hidden rowid primary key has succeeded */ } },
-            didChange: { _ in expectation.fulfill()
-        })
-        try controller.performFetch()
-        try dbQueue.inDatabase { db in
-            person.name = "Barbara"
-            try person.update(db)
-        }
-        waitForExpectations(timeout: 1, handler: nil)
-        
-        XCTAssertTrue(update)
     }
 }

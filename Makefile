@@ -8,14 +8,14 @@
 # make distclean - Restore repository to a pristine state
 
 default: test
-
+smokeTest: test_framework_GRDBiOS_maxTarget test_framework_GRDBiOS_minTarget test_framework_SQLCipher4 test_framework_GRDBCustomSQLiteiOS_maxTarget test_SPM
 
 # Requirements
 # ============
 #
-# Xcode >= 9.0, with iOS8.1 Simulator installed
-# CocoaPods ~> 1.6.0 - https://cocoapods.org
-# Jazzy ~> 0.7.4 - https://github.com/realm/jazzy
+# Xcode
+# CocoaPods - https://cocoapods.org
+# Jazzy - https://github.com/realm/jazzy
 
 GIT := $(shell command -v git)
 JAZZY := $(shell command -v jazzy)
@@ -49,48 +49,36 @@ endif
 TEST_ACTIONS = clean build build-for-testing test-without-building
 
 # When adding support for an Xcode version, look for available devices with `instruments -s devices`
-ifeq ($(XCODEVERSION),11.1)
-  MAX_SWIFT_VERSION = 5.1
-  MIN_SWIFT_VERSION = 4.2
-  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 11,OS=13.1"
-  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 5,OS=10.3.1"
-  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=13.0"
+ifeq ($(XCODEVERSION),12.0)
+  MAX_SWIFT_VERSION = 5.3
+  MIN_SWIFT_VERSION = 5.2
+  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 11,OS=14.0"
+  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 5s,OS=10.3.1"
+  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=14.0"
   MIN_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV,OS=10.2"
-else ifeq ($(XCODEVERSION),11.0)
-  MAX_SWIFT_VERSION = 5.1
-  MIN_SWIFT_VERSION = 4.2
-  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 11,OS=13.0"
-  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 5,OS=10.3.1"
-  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=13.0"
+else ifeq ($(XCODEVERSION),11.6)
+  MAX_SWIFT_VERSION = 5.2
+  MIN_SWIFT_VERSION = # MAX_SWIFT_VERSION is the minimum supported Swift version
+  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 11,OS=13.6"
+  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 5s,OS=10.3.1"
+  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=13.4"
   MIN_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV,OS=10.2"
-else ifeq ($(XCODEVERSION),10.3)
-  MAX_SWIFT_VERSION = 5
-  MIN_SWIFT_VERSION = 4.2
-  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone X,OS=12.4"
-  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 5,OS=10.3.1"
-  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=12.4"
+else ifeq ($(XCODEVERSION),11.5)
+  MAX_SWIFT_VERSION = 5.2
+  MIN_SWIFT_VERSION = # MAX_SWIFT_VERSION is the minimum supported Swift version
+  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 11,OS=13.5"
+  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 5s,OS=10.3.1"
+  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=13.4"
   MIN_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV,OS=10.2"
-else ifeq ($(XCODEVERSION),10.2)
-  MAX_SWIFT_VERSION = 5
-  MIN_SWIFT_VERSION = 4.2
-  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone X,OS=12.2"
-  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 4s,OS=9.0"
-  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=12.2"
-  MIN_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV,OS=10.0"
-else ifeq ($(XCODEVERSION),10.1)
-  MAX_SWIFT_VERSION = 4.2
-  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone X,OS=12.1"
-  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 4s,OS=9.0"
-  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=12.1"
-  MIN_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV,OS=10.0"
-else ifeq ($(XCODEVERSION),10.0)
-  MAX_SWIFT_VERSION = 4.2
-  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 8,OS=12.0"
-  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 4s,OS=9.0"
-  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=12.0"
-  MIN_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV,OS=10.0"
+else ifeq ($(XCODEVERSION),11.4)
+  MAX_SWIFT_VERSION = 5.2
+  MIN_SWIFT_VERSION = # MAX_SWIFT_VERSION is the minimum supported Swift version
+  MAX_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 11,OS=13.4.1"
+  MIN_IOS_DESTINATION = "platform=iOS Simulator,name=iPhone 5s,OS=10.3.1"
+  MAX_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV 4K,OS=13.4"
+  MIN_TVOS_DESTINATION = "platform=tvOS Simulator,name=Apple TV,OS=10.2"
 else
-  # Swift 4.1 required: Xcode < 9.3 is not supported
+  # Swift 5.2 required: Xcode < 11.4 is not supported
 endif
 
 # If xcpretty is available, use it for xcodebuild output
@@ -241,7 +229,7 @@ test_framework_GRDBtvOS_minTarget:
 test_framework_GRDBCustomSQLiteOSX: SQLiteCustom
 	$(XCODEBUILD) \
 	  -project GRDBCustom.xcodeproj \
-	  -scheme GRDBCustomSQLiteOSX \
+	  -scheme GRDBOSX \
 	  SWIFT_VERSION=$(MAX_SWIFT_VERSION) \
 	  $(TEST_ACTIONS) \
 	  $(XCPRETTY)
@@ -252,7 +240,7 @@ test_framework_GRDBCustomSQLiteiOS_maxTarget: test_framework_GRDBCustomSQLiteiOS
 test_framework_GRDBCustomSQLiteiOS_maxTarget_maxSwift: SQLiteCustom
 	$(XCODEBUILD) \
 	  -project GRDBCustom.xcodeproj \
-	  -scheme GRDBCustomSQLiteiOS \
+	  -scheme GRDBiOS \
 	  -destination $(MAX_IOS_DESTINATION) \
 	  SWIFT_VERSION=$(MAX_SWIFT_VERSION) \
 	  $(TEST_ACTIONS) \
@@ -262,7 +250,7 @@ test_framework_GRDBCustomSQLiteiOS_maxTarget_minSwift: SQLiteCustom
 ifdef MIN_SWIFT_VERSION
 	$(XCODEBUILD) \
 	  -project GRDBCustom.xcodeproj \
-	  -scheme GRDBCustomSQLiteiOS \
+	  -scheme GRDBiOS \
 	  -destination $(MAX_IOS_DESTINATION) \
 	  SWIFT_VERSION=$(MIN_SWIFT_VERSION) \
 	  $(TEST_ACTIONS) \
@@ -272,7 +260,7 @@ endif
 test_framework_GRDBCustomSQLiteiOS_minTarget: SQLiteCustom
 	$(XCODEBUILD) \
 	  -project GRDBCustom.xcodeproj \
-	  -scheme GRDBCustomSQLiteiOS \
+	  -scheme GRDBiOS \
 	  -destination $(MIN_IOS_DESTINATION) \
 	  SWIFT_VERSION=$(MAX_SWIFT_VERSION) \
 	  $(TEST_ACTIONS) \
@@ -328,14 +316,8 @@ test_install_SPM: test_install_SPM_Package test_install_SPM_Project
 
 test_install_SPM_Package:
 	cd Tests/SPM/PlainPackage && \
-	( if [ -a .build ] && [ -a Package.resolved ]; then $(SWIFT) package reset; fi ) && \
-	rm -rf Packages/GRDB && \
-	$(SWIFT) package edit GRDB --revision master && \
-	rm -rf Packages/GRDB && \
-	ln -s ../../../.. Packages/GRDB && \
 	$(SWIFT) build && \
-	./.build/debug/SPM && \
-	$(SWIFT) package unedit --force GRDB
+	./.build/debug/SPM
 
 test_install_SPM_Project:
 	$(XCODEBUILD) \
@@ -395,40 +377,22 @@ else
 	@exit 1
 endif
 
-test_performance: Realm FMDB SQLite.swift
+test_performance:
 	$(XCODEBUILD) \
-	  -project GRDB.xcodeproj \
+	  -project Tests/Performance/GRDBPerformance/GRDBPerformance.xcodeproj \
 	  -scheme GRDBOSXPerformanceComparisonTests \
 	  build-for-testing test-without-building
-
-Realm: Tests/Performance/Realm/build/osx/swift-10.3/RealmSwift.framework
-
-# Makes sure the Tests/Performance/Realm submodule has been downloaded, and Realm framework has been built.
-Tests/Performance/Realm/build/osx/swift-10.3/RealmSwift.framework:
-	$(GIT) submodule update --init --recursive Tests/Performance/Realm
-	cd Tests/Performance/Realm && sh build.sh osx-swift
-
-FMDB: Tests/Performance/fmdb/src/fmdb/FMDatabase.h
-
-# Makes sure the Tests/Performance/fmdb submodule has been downloaded
-Tests/Performance/fmdb/src/fmdb/FMDatabase.h:
-	$(GIT) submodule update --init Tests/Performance/fmdb
-
-SQLite.swift: Tests/Performance/SQLite.swift/SQLite.xcodeproj
-
-# Makes sure the Tests/Performance/SQLite.swift submodule has been downloaded
-Tests/Performance/SQLite.swift/SQLite.xcodeproj:
-	$(GIT) submodule update --init Tests/Performance/SQLite.swift
 
 # Target that setups SQLite custom builds with extra compilation options.
 SQLiteCustom: SQLiteCustom/src/sqlite3.h
 	echo '/* Makefile generated */' > SQLiteCustom/GRDBCustomSQLite-USER.h
 	echo '#define SQLITE_ENABLE_PREUPDATE_HOOK' >> SQLiteCustom/GRDBCustomSQLite-USER.h
 	echo '#define SQLITE_ENABLE_FTS5' >> SQLiteCustom/GRDBCustomSQLite-USER.h
+	echo '#define SQLITE_ENABLE_SNAPSHOT' >> SQLiteCustom/GRDBCustomSQLite-USER.h
 	echo '// Makefile generated' > SQLiteCustom/GRDBCustomSQLite-USER.xcconfig
-	echo 'CUSTOM_OTHER_SWIFT_FLAGS = -D SQLITE_ENABLE_PREUPDATE_HOOK -D SQLITE_ENABLE_FTS5' >> SQLiteCustom/GRDBCustomSQLite-USER.xcconfig
+	echo 'CUSTOM_OTHER_SWIFT_FLAGS = -D SQLITE_ENABLE_PREUPDATE_HOOK -D SQLITE_ENABLE_FTS5 -D SQLITE_ENABLE_SNAPSHOT' >> SQLiteCustom/GRDBCustomSQLite-USER.xcconfig
 	echo '// Makefile generated' > SQLiteCustom/src/SQLiteLib-USER.xcconfig
-	echo 'CUSTOM_SQLLIBRARY_CFLAGS = -DSQLITE_ENABLE_PREUPDATE_HOOK -DSQLITE_ENABLE_FTS5' >> SQLiteCustom/src/SQLiteLib-USER.xcconfig
+	echo 'CUSTOM_SQLLIBRARY_CFLAGS = -DSQLITE_ENABLE_PREUPDATE_HOOK -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_SNAPSHOT' >> SQLiteCustom/src/SQLiteLib-USER.xcconfig
 
 # Makes sure the SQLiteCustom/src submodule has been downloaded
 SQLiteCustom/src/sqlite3.h:
@@ -445,10 +409,10 @@ ifdef JAZZY
 	  --author 'Gwendal Roué' \
 	  --author_url https://github.com/groue \
 	  --github_url https://github.com/groue/GRDB.swift \
-	  --github-file-prefix https://github.com/groue/GRDB.swift/tree/v4.5.0 \
-	  --module-version 4.5.0 \
+	  --github-file-prefix https://github.com/groue/GRDB.swift/tree/v5.0.3 \
+	  --module-version 5.0.3 \
 	  --module GRDB \
-	  --root-url http://groue.github.io/GRDB.swift/docs/4.5/ \
+	  --root-url http://groue.github.io/GRDB.swift/docs/5.0/ \
 	  --output Documentation/Reference \
 	  --xcodebuild-arguments -project,GRDB.xcodeproj,-scheme,GRDBiOS
 else
@@ -463,16 +427,12 @@ endif
 distclean:
 	$(GIT) reset --hard
 	$(GIT) clean -dffx .
-	rm -rf Tests/Performance/fmdb && $(GIT) checkout -- Tests/Performance/fmdb
-	rm -rf Tests/Performance/SQLite.swift && $(GIT) checkout -- Tests/Performance/SQLite.swift
-	rm -rf Tests/Performance/Realm && $(GIT) checkout -- Tests/Performance/Realm
 	rm -rf SQLiteCustom/src && $(GIT) checkout -- SQLiteCustom/src
 
 clean:
 	$(SWIFT) package reset
 	cd Tests/SPM && $(SWIFT) package reset
 	rm -rf Documentation/Reference
-	if [ -a Tests/Performance/Realm/build.sh ]; then cd Tests/Performance/Realm && sh build.sh clean; fi
 	find . -name Package.resolved | xargs rm -f
 
-.PHONY: distclean clean doc test SQLiteCustom
+.PHONY: distclean clean doc test smokeTest SQLiteCustom

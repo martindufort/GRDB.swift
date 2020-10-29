@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 private struct Team: Codable, FetchableRecord, PersistableRecord {
     static let players = hasMany(Player.self)
@@ -22,7 +18,7 @@ private struct Player: Codable, FetchableRecord, PersistableRecord {
 }
 
 private struct Award: Codable, FetchableRecord, PersistableRecord {
-    var id: Int64
+    var customPrimaryKey: Int64
     var teamId: Int64?
     var name: String
 }
@@ -60,7 +56,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 t.column("score", .integer)
             }
             try db.create(table: "award") { t in
-                t.column("id", .integer).primaryKey()
+                t.column("customPrimaryKey", .integer).primaryKey()
                 t.column("teamId", .integer).references("team")
                 t.column("name", .text)
             }
@@ -68,16 +64,16 @@ class AssociationAggregateTests: GRDBTestCase {
             try Team(id: 1, name: "Reds").insert(db)
             try Player(id: 1, teamId: 1, name: "Arthur", score: 100).insert(db)
             try Player(id: 2, teamId: 1, name: "Barbara", score: 1000).insert(db)
-            try Award(id: 1, teamId: 1, name: "World cup 2035").insert(db)
-            try Award(id: 2, teamId: 1, name: "World cup 2038").insert(db)
-            try Award(id: 3, teamId: 1, name: "European cup 2038").insert(db)
+            try Award(customPrimaryKey: 1, teamId: 1, name: "World cup 2035").insert(db)
+            try Award(customPrimaryKey: 2, teamId: 1, name: "World cup 2038").insert(db)
+            try Award(customPrimaryKey: 3, teamId: 1, name: "European cup 2038").insert(db)
             try Team(id: 2, name: "Blues").insert(db)
             try Player(id: 3, teamId: 2, name: "Craig", score: 200).insert(db)
             try Player(id: 4, teamId: 2, name: "David", score: 500).insert(db)
             try Player(id: 5, teamId: 2, name: "Elise", score: 800).insert(db)
-            try Award(id: 4, teamId: 2, name: "European cup 2036").insert(db)
+            try Award(customPrimaryKey: 4, teamId: 2, name: "European cup 2036").insert(db)
             try Team(id: 3, name: "Greens").insert(db)
-            try Award(id: 5, teamId: 3, name: "World cup 2037").insert(db)
+            try Award(customPrimaryKey: 5, teamId: 3, name: "World cup 2037").insert(db)
             try Team(id: 4, name: "Oranges").insert(db)
             try Player(id: 6, teamId: 4, name: "Fiona", score: 0).insert(db)
         }
@@ -92,7 +88,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 .joining(required: Team.players.aliased(tableAlias).filter(sql: "custom.score < ?", arguments: [500]))
             
             try assertEqualSQL(db, request, """
-                SELECT "team".*, COUNT(DISTINCT "custom"."rowid") AS "playerCount" \
+                SELECT "team".*, COUNT(DISTINCT "custom"."id") AS "playerCount" \
                 FROM "team" \
                 JOIN "player" "custom" ON ("custom"."teamId" = "team"."id") AND (custom.score < 500) \
                 GROUP BY "team"."id"
@@ -109,7 +105,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 .group(Column("name"))
             
             try assertEqualSQL(db, request, """
-                SELECT "team"."name", COUNT(DISTINCT "player"."rowid") AS "playerCount" \
+                SELECT "team"."name", COUNT(DISTINCT "player"."id") AS "playerCount" \
                 FROM "team" \
                 LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                 GROUP BY "team"."name"
@@ -163,7 +159,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 .asRequest(of: TeamInfo.self)
             
             try assertEqualSQL(db, request, """
-                SELECT "team".*, COUNT(DISTINCT "player"."rowid") AS "playerCount" \
+                SELECT "team".*, COUNT(DISTINCT "player"."id") AS "playerCount" \
                 FROM "team" \
                 LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                 GROUP BY "team"."id" \
@@ -204,7 +200,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 .asRequest(of: PlayerInfo.self)
             
             try assertEqualSQL(db, request, """
-                SELECT "player".*, COUNT(DISTINCT "award"."rowid") AS "awardCount" \
+                SELECT "player".*, COUNT(DISTINCT "award"."customPrimaryKey") AS "awardCount" \
                 FROM "player" \
                 LEFT JOIN "team" ON "team"."id" = "player"."teamId" \
                 LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
@@ -269,6 +265,46 @@ class AssociationAggregateTests: GRDBTestCase {
             XCTAssertEqual(teamInfos[3].team.id, 4)
             XCTAssertEqual(teamInfos[3].team.name, "Oranges")
             XCTAssertEqual(teamInfos[3].maxPlayerScore, 0)
+        }
+    }
+    
+    func testAnnotatedWithHasManyDefaultMaxJoiningRequired() throws {
+        // It is important to have an explicit test for this technique because
+        // it is the only currently available that forces a JOIN, and we don't
+        // want to break it in the future, even if association aggregates
+        // change implementation eventually.
+
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.read { db in
+            let request = Team
+                .annotated(with: Team.players.max(Column("score")))
+                .joining(required: Team.players) // <- the tested technique
+                .orderByPrimaryKey()
+                .asRequest(of: TeamInfo.self)
+            
+            try assertEqualSQL(db, request, """
+                SELECT "team".*, MAX("player"."score") AS "maxPlayerScore" \
+                FROM "team" \
+                JOIN "player" ON "player"."teamId" = "team"."id" \
+                GROUP BY "team"."id" \
+                ORDER BY "team"."id"
+                """)
+            
+            // No result with nil maxPlayerScore thanks to the inner join
+            let teamInfos = try request.fetchAll(db)
+            XCTAssertEqual(teamInfos.count, 3)
+            
+            XCTAssertEqual(teamInfos[0].team.id, 1)
+            XCTAssertEqual(teamInfos[0].team.name, "Reds")
+            XCTAssertEqual(teamInfos[0].maxPlayerScore, 1000)
+            
+            XCTAssertEqual(teamInfos[1].team.id, 2)
+            XCTAssertEqual(teamInfos[1].team.name, "Blues")
+            XCTAssertEqual(teamInfos[1].maxPlayerScore, 800)
+            
+            XCTAssertEqual(teamInfos[2].team.id, 4)
+            XCTAssertEqual(teamInfos[2].team.name, "Oranges")
+            XCTAssertEqual(teamInfos[2].maxPlayerScore, 0)
         }
     }
     
@@ -360,7 +396,7 @@ class AssociationAggregateTests: GRDBTestCase {
             try assertEqualSQL(db, request, """
                 SELECT "team".*, \
                 AVG("player"."score") AS "averagePlayerScore", \
-                COUNT(DISTINCT "player"."rowid") AS "playerCount", \
+                COUNT(DISTINCT "player"."id") AS "playerCount", \
                 MIN("player"."score") AS "minPlayerScore", \
                 MAX("player"."score") AS "maxPlayerScore", \
                 SUM("player"."score") AS "playerScoreSum" \
@@ -453,7 +489,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 .asRequest(of: CustomTeamInfo.self)
             
             try assertEqualSQL(db, request, """
-                SELECT "team".*, COUNT(DISTINCT "player"."rowid") AS "customPlayerCount" \
+                SELECT "team".*, COUNT(DISTINCT "player"."id") AS "customPlayerCount" \
                 FROM "team" \
                 LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                 GROUP BY "team"."id" \
@@ -606,7 +642,7 @@ class AssociationAggregateTests: GRDBTestCase {
             try assertEqualSQL(db, request, """
                 SELECT "team".*, \
                 AVG("player"."score") AS "averageCustomPlayerScore", \
-                COUNT(DISTINCT "player"."rowid") AS "customPlayerCount", \
+                COUNT(DISTINCT "player"."id") AS "customPlayerCount", \
                 MIN("player"."score") AS "minCustomPlayerScore", \
                 MAX("player"."score") AS "maxCustomPlayerScore", \
                 SUM("player"."score") AS "customPlayerScoreSum" \
@@ -666,7 +702,7 @@ class AssociationAggregateTests: GRDBTestCase {
             try assertEqualSQL(db, request, """
                 SELECT "team".*, \
                 AVG("player"."score") AS "a1", \
-                COUNT(DISTINCT "player"."rowid") AS "a2", \
+                COUNT(DISTINCT "player"."id") AS "a2", \
                 MAX("player"."score") AS "a3", \
                 MIN("player"."score") AS "a4", \
                 SUM("player"."score") AS "a5" \
@@ -714,8 +750,8 @@ class AssociationAggregateTests: GRDBTestCase {
             
             try assertEqualSQL(db, request, """
                 SELECT "team".*, \
-                COUNT(DISTINCT "player1"."rowid") AS "lowPlayerCount", \
-                COUNT(DISTINCT "player2"."rowid") AS "highPlayerCount" \
+                COUNT(DISTINCT "player1"."id") AS "lowPlayerCount", \
+                COUNT(DISTINCT "player2"."id") AS "highPlayerCount" \
                 FROM "team" \
                 LEFT JOIN "player" "player1" ON ("player1"."teamId" = "team"."id") AND ("player1"."score" < 500) \
                 LEFT JOIN "player" "player2" ON ("player2"."teamId" = "team"."id") AND ("player2"."score" >= 500) \
@@ -754,7 +790,7 @@ class AssociationAggregateTests: GRDBTestCase {
             do {
                 let request = Team.annotated(with: Team.players.isEmpty)
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") = 0 AS "hasNoPlayer" \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") = 0 AS "hasNoPlayer" \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -765,7 +801,7 @@ class AssociationAggregateTests: GRDBTestCase {
             do {
                 let request = Team.annotated(with: !Team.players.isEmpty)
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") > 0 \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") > 0 \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -780,7 +816,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") = 0
+                    HAVING COUNT(DISTINCT "player"."id") = 0
                     """)
                 try XCTAssertEqual(request.fetchAll(db).count, 1)
                 try XCTAssertEqual(request.fetchCount(db), 1)
@@ -792,7 +828,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") > 0
+                    HAVING COUNT(DISTINCT "player"."id") > 0
                     """)
                 try XCTAssertEqual(request.fetchAll(db).count, 3)
                 try XCTAssertEqual(request.fetchCount(db), 3)
@@ -804,7 +840,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") > 0
+                    HAVING COUNT(DISTINCT "player"."id") > 0
                     """)
                 try XCTAssertEqual(request.fetchAll(db).count, 3)
                 try XCTAssertEqual(request.fetchCount(db), 3)
@@ -816,7 +852,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") = 0
+                    HAVING COUNT(DISTINCT "player"."id") = 0
                     """)
                 try XCTAssertEqual(request.fetchAll(db).count, 1)
                 try XCTAssertEqual(request.fetchCount(db), 1)
@@ -835,7 +871,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "team" ON "team"."id" = "player"."teamId" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "player"."id" \
-                    HAVING COUNT(DISTINCT "award"."rowid") = 0
+                    HAVING COUNT(DISTINCT "award"."customPrimaryKey") = 0
                     """)
                 try XCTAssertEqual(request.fetchAll(db).count, 1)
                 try XCTAssertEqual(request.fetchCount(db), 1)
@@ -848,7 +884,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "team" ON "team"."id" = "player"."teamId" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "player"."id" \
-                    HAVING COUNT(DISTINCT "award"."rowid") > 0
+                    HAVING COUNT(DISTINCT "award"."customPrimaryKey") > 0
                     """)
                 try XCTAssertEqual(request.fetchAll(db).count, 5)
                 try XCTAssertEqual(request.fetchCount(db), 5)
@@ -861,7 +897,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "team" ON "team"."id" = "player"."teamId" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "player"."id" \
-                    HAVING COUNT(DISTINCT "award"."rowid") > 0
+                    HAVING COUNT(DISTINCT "award"."customPrimaryKey") > 0
                     """)
                 try XCTAssertEqual(request.fetchAll(db).count, 5)
                 try XCTAssertEqual(request.fetchCount(db), 5)
@@ -874,7 +910,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "team" ON "team"."id" = "player"."teamId" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "player"."id" \
-                    HAVING COUNT(DISTINCT "award"."rowid") = 0
+                    HAVING COUNT(DISTINCT "award"."customPrimaryKey") = 0
                     """)
                 try XCTAssertEqual(request.fetchAll(db).count, 1)
                 try XCTAssertEqual(request.fetchCount(db), 1)
@@ -893,7 +929,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") = 2
+                    HAVING COUNT(DISTINCT "player"."id") = 2
                     """)
             }
             do {
@@ -904,7 +940,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING 2 = COUNT(DISTINCT "player"."rowid")
+                    HAVING 2 = COUNT(DISTINCT "player"."id")
                     """)
             }
             do {
@@ -916,7 +952,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") = COUNT(DISTINCT "award"."rowid")
+                    HAVING COUNT(DISTINCT "player"."id") = COUNT(DISTINCT "award"."customPrimaryKey")
                     """)
             }
         }
@@ -933,7 +969,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") <> 2
+                    HAVING COUNT(DISTINCT "player"."id") <> 2
                     """)
             }
             do {
@@ -944,7 +980,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING 2 <> COUNT(DISTINCT "player"."rowid")
+                    HAVING 2 <> COUNT(DISTINCT "player"."id")
                     """)
             }
             do {
@@ -956,7 +992,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") <> COUNT(DISTINCT "award"."rowid")
+                    HAVING COUNT(DISTINCT "player"."id") <> COUNT(DISTINCT "award"."customPrimaryKey")
                     """)
             }
         }
@@ -973,7 +1009,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") >= 2
+                    HAVING COUNT(DISTINCT "player"."id") >= 2
                     """)
             }
             do {
@@ -984,7 +1020,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING 2 >= COUNT(DISTINCT "player"."rowid")
+                    HAVING 2 >= COUNT(DISTINCT "player"."id")
                     """)
             }
             do {
@@ -996,7 +1032,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") >= COUNT(DISTINCT "award"."rowid")
+                    HAVING COUNT(DISTINCT "player"."id") >= COUNT(DISTINCT "award"."customPrimaryKey")
                     """)
             }
         }
@@ -1013,7 +1049,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") > 2
+                    HAVING COUNT(DISTINCT "player"."id") > 2
                     """)
             }
             do {
@@ -1024,7 +1060,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING 2 > COUNT(DISTINCT "player"."rowid")
+                    HAVING 2 > COUNT(DISTINCT "player"."id")
                     """)
             }
             do {
@@ -1036,7 +1072,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") > COUNT(DISTINCT "award"."rowid")
+                    HAVING COUNT(DISTINCT "player"."id") > COUNT(DISTINCT "award"."customPrimaryKey")
                     """)
             }
         }
@@ -1053,7 +1089,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") <= 2
+                    HAVING COUNT(DISTINCT "player"."id") <= 2
                     """)
             }
             do {
@@ -1064,7 +1100,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING 2 <= COUNT(DISTINCT "player"."rowid")
+                    HAVING 2 <= COUNT(DISTINCT "player"."id")
                     """)
             }
             do {
@@ -1076,7 +1112,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") <= COUNT(DISTINCT "award"."rowid")
+                    HAVING COUNT(DISTINCT "player"."id") <= COUNT(DISTINCT "award"."customPrimaryKey")
                     """)
             }
         }
@@ -1093,7 +1129,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") < 2
+                    HAVING COUNT(DISTINCT "player"."id") < 2
                     """)
             }
             do {
@@ -1104,7 +1140,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING 2 < COUNT(DISTINCT "player"."rowid")
+                    HAVING 2 < COUNT(DISTINCT "player"."id")
                     """)
             }
             do {
@@ -1116,7 +1152,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING COUNT(DISTINCT "player"."rowid") < COUNT(DISTINCT "award"."rowid")
+                    HAVING COUNT(DISTINCT "player"."id") < COUNT(DISTINCT "award"."customPrimaryKey")
                     """)
             }
         }
@@ -1134,7 +1170,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING (COUNT(DISTINCT "player"."rowid") = 0) AND (COUNT(DISTINCT "award"."rowid") = 0)
+                    HAVING (COUNT(DISTINCT "player"."id") = 0) AND (COUNT(DISTINCT "award"."customPrimaryKey") = 0)
                     """)
             }
             do {
@@ -1146,7 +1182,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING (COUNT(DISTINCT "player"."rowid") = 0) OR (COUNT(DISTINCT "award"."rowid") = 0)
+                    HAVING (COUNT(DISTINCT "player"."id") = 0) OR (COUNT(DISTINCT "award"."customPrimaryKey") = 0)
                     """)
             }
             do {
@@ -1158,7 +1194,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING NOT ((COUNT(DISTINCT "player"."rowid") = 0) OR (COUNT(DISTINCT "award"."rowid") = 0))
+                    HAVING NOT ((COUNT(DISTINCT "player"."id") = 0) OR (COUNT(DISTINCT "award"."customPrimaryKey") = 0))
                     """)
             }
             do {
@@ -1170,7 +1206,7 @@ class AssociationAggregateTests: GRDBTestCase {
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
                     GROUP BY "team"."id" \
-                    HAVING (NOT (COUNT(DISTINCT "player"."rowid") > 3)) OR (COUNT(DISTINCT "award"."rowid") = 0)
+                    HAVING (NOT (COUNT(DISTINCT "player"."id") > 3)) OR (COUNT(DISTINCT "award"."customPrimaryKey") = 0)
                     """)
             }
         }
@@ -1183,7 +1219,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: -Team.players.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, -COUNT(DISTINCT "player"."rowid") \
+                    SELECT "team".*, -COUNT(DISTINCT "player"."id") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1199,7 +1235,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: Team.players.count + 2)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") + 2 \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") + 2 \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1209,7 +1245,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: 2 + Team.players.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, 2 + COUNT(DISTINCT "player"."rowid") \
+                    SELECT "team".*, 2 + COUNT(DISTINCT "player"."id") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1219,7 +1255,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: Team.players.count + Team.awards.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") + COUNT(DISTINCT "award"."rowid") \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") + COUNT(DISTINCT "award"."customPrimaryKey") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
@@ -1236,7 +1272,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: Team.players.count - 2)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") - 2 \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") - 2 \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1246,7 +1282,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: 2 - Team.players.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, 2 - COUNT(DISTINCT "player"."rowid") \
+                    SELECT "team".*, 2 - COUNT(DISTINCT "player"."id") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1256,7 +1292,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: Team.players.count - Team.awards.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") - COUNT(DISTINCT "award"."rowid") \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") - COUNT(DISTINCT "award"."customPrimaryKey") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
@@ -1273,7 +1309,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: Team.players.count * 2)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") * 2 \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") * 2 \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1283,7 +1319,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: 2 * Team.players.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, 2 * COUNT(DISTINCT "player"."rowid") \
+                    SELECT "team".*, 2 * COUNT(DISTINCT "player"."id") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1293,7 +1329,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: Team.players.count * Team.awards.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") * COUNT(DISTINCT "award"."rowid") \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") * COUNT(DISTINCT "award"."customPrimaryKey") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \
@@ -1310,7 +1346,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: Team.players.count / 2)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") / 2 \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") / 2 \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1320,7 +1356,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: 2 / Team.players.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, 2 / COUNT(DISTINCT "player"."rowid") \
+                    SELECT "team".*, 2 / COUNT(DISTINCT "player"."id") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     GROUP BY "team"."id"
@@ -1330,7 +1366,7 @@ class AssociationAggregateTests: GRDBTestCase {
                 let request = Team.annotated(with: Team.players.count / Team.awards.count)
                 
                 try assertEqualSQL(db, request, """
-                    SELECT "team".*, COUNT(DISTINCT "player"."rowid") / COUNT(DISTINCT "award"."rowid") \
+                    SELECT "team".*, COUNT(DISTINCT "player"."id") / COUNT(DISTINCT "award"."customPrimaryKey") \
                     FROM "team" \
                     LEFT JOIN "player" ON "player"."teamId" = "team"."id" \
                     LEFT JOIN "award" ON "award"."teamId" = "team"."id" \

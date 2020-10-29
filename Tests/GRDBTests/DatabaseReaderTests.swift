@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-import GRDBCustomSQLite
-#else
 import GRDB
-#endif
 
 class DatabaseReaderTests : GRDBTestCase {
     
@@ -111,17 +107,16 @@ class DatabaseReaderTests : GRDBTestCase {
     
     // MARK: - AsyncRead
     
-    #if compiler(>=5.0)
     func testAsyncRead() throws {
         func test(_ dbReader: DatabaseReader) throws {
             let expectation = self.expectation(description: "updates")
             let semaphore = DispatchSemaphore(value: 0)
             var count: Int?
-            dbReader.asyncRead { db in
+            dbReader.asyncRead { dbResult in
                 // Make sure this block executes asynchronously
                 semaphore.wait()
                 do {
-                    count = try Int.fetchOne(db.get(), sql: "SELECT COUNT(*) FROM sqlite_master")
+                    count = try Int.fetchOne(dbResult.get(), sql: "SELECT COUNT(*) FROM sqlite_master")
                 } catch {
                     XCTFail("Unexpected error: \(error)")
                 }
@@ -137,18 +132,16 @@ class DatabaseReaderTests : GRDBTestCase {
         try test(makeDatabasePool())
         try test(makeDatabasePool().makeSnapshot())
     }
-    #endif
     
-    #if compiler(>=5.0)
     func testAsyncReadPreventsDatabaseModification() throws {
         func test(_ dbReader: DatabaseReader) throws {
             let expectation = self.expectation(description: "updates")
             let semaphore = DispatchSemaphore(value: 0)
-            dbReader.asyncRead { db in
+            dbReader.asyncRead { dbResult in
                 // Make sure this block executes asynchronously
                 semaphore.wait()
                 do {
-                    try db.get().execute(sql: "CREATE TABLE testAsyncReadPreventsDatabaseModification (a)")
+                    try dbResult.get().execute(sql: "CREATE TABLE testAsyncReadPreventsDatabaseModification (a)")
                     XCTFail("Expected error")
                 } catch let error as DatabaseError {
                     XCTAssertEqual(error.resultCode, .SQLITE_READONLY)
@@ -165,16 +158,15 @@ class DatabaseReaderTests : GRDBTestCase {
         try test(makeDatabasePool())
         try test(makeDatabasePool().makeSnapshot())
     }
-    #endif
     
     // MARK: - Function
     
     func testAddFunction() throws {
         func test(_ dbReader: DatabaseReader) throws {
-            let f = DatabaseFunction("f", argumentCount: 0, pure: true) { _ in 0 }
-            dbReader.add(function: f)
-            let value = try dbReader.read { db in
-                try Int.fetchOne(db, sql: "SELECT f()")
+            let value = try dbReader.read { db -> Int? in
+                let f = DatabaseFunction("f", argumentCount: 0, pure: true) { _ in 0 }
+                db.add(function: f)
+                return try Int.fetchOne(db, sql: "SELECT f()")
             }
             XCTAssertEqual(value, 0)
         }
@@ -188,10 +180,10 @@ class DatabaseReaderTests : GRDBTestCase {
     
     func testAddCollation() throws {
         func test(_ dbReader: DatabaseReader) throws {
-            let collation = DatabaseCollation("c") { _, _ in .orderedSame }
-            dbReader.add(collation: collation)
-            let value = try dbReader.read { db in
-                try Int.fetchOne(db, sql: "SELECT 'foo' AS str ORDER BY str COLLATE c")
+            let value = try dbReader.read { db -> Int? in
+                let collation = DatabaseCollation("c") { _, _ in .orderedSame }
+                db.add(collation: collation)
+                return try Int.fetchOne(db, sql: "SELECT 'foo' AS str ORDER BY str COLLATE c")
             }
             XCTAssertEqual(value, 0)
         }

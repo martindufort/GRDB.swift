@@ -1,10 +1,6 @@
 import XCTest
 import Foundation
-#if GRDBCUSTOMSQLITE
-    @testable import GRDBCustomSQLite
-#else
-    @testable import GRDB
-#endif
+@testable import GRDB
 
 private protocol StrategyProvider {
     static var strategy: DatabaseDateEncodingStrategy { get }
@@ -30,7 +26,7 @@ private enum StrategyMillisecondsSince1970: StrategyProvider {
     static let strategy: DatabaseDateEncodingStrategy = .millisecondsSince1970
 }
 
-@available(macOS 10.12, iOS 10.0, watchOS 3.0, tvOS 10.0, *)
+@available(macOS 10.12, watchOS 3.0, tvOS 10.0, *)
 private enum StrategyIso8601: StrategyProvider {
     static let strategy: DatabaseDateEncodingStrategy = .iso8601
 }
@@ -51,12 +47,12 @@ private enum StrategyCustom: StrategyProvider {
 }
 
 private struct RecordWithDate<Strategy: StrategyProvider>: PersistableRecord, Encodable {
-    static var databaseDateEncodingStrategy: DatabaseDateEncodingStrategy { return Strategy.strategy }
+    static var databaseDateEncodingStrategy: DatabaseDateEncodingStrategy { Strategy.strategy }
     var date: Date
 }
 
 private struct RecordWithOptionalDate<Strategy: StrategyProvider>: PersistableRecord, Encodable {
-    static var databaseDateEncodingStrategy: DatabaseDateEncodingStrategy { return Strategy.strategy }
+    static var databaseDateEncodingStrategy: DatabaseDateEncodingStrategy { Strategy.strategy }
     var date: Date?
 }
 
@@ -169,18 +165,19 @@ extension DatabaseDateEncodingStrategyTests {
 // MARK: - iso8601(ISO8601DateFormatter)
 
 extension DatabaseDateEncodingStrategyTests {
-    func testIso8601() {
-        // check ISO8601DateFormatter availabiliity
-        if #available(macOS 10.12, iOS 10.0, watchOS 3.0, tvOS 10.0, *) {
-            testNullEncoding(strategy: StrategyIso8601.self)
-            
-            for (date, value) in zip(testedDates, [
-                "1969-12-20T13:39:05Z",
-                "1970-01-02T10:17:36Z",
-                "2001-01-01T00:00:00Z",
-                "2001-01-02T10:17:36Z",
-                ]) { test(strategy: StrategyIso8601.self, encodesDate: date, as: value) }
+    func testIso8601() throws {
+        guard #available(macOS 10.12, watchOS 3.0, tvOS 10.0, *) else {
+            throw XCTSkip("ISO8601DateFormatter is not available")
         }
+        
+        testNullEncoding(strategy: StrategyIso8601.self)
+        
+        for (date, value) in zip(testedDates, [
+            "1969-12-20T13:39:05Z",
+            "1970-01-02T10:17:36Z",
+            "2001-01-01T00:00:00Z",
+            "2001-01-02T10:17:36Z",
+        ]) { test(strategy: StrategyIso8601.self, encodesDate: date, as: value) }
     }
 }
 

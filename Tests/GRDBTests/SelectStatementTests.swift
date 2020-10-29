@@ -1,16 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    @testable import GRDBCustomSQLite
-#else
-    #if GRDBCIPHER
-        import SQLCipher
-    #elseif SWIFT_PACKAGE
-        import CSQLite
-    #else
-        import SQLite3
-    #endif
-    @testable import GRDB
-#endif
+@testable import GRDB
 
 class SelectStatementTests : GRDBTestCase {
     
@@ -37,7 +26,7 @@ class SelectStatementTests : GRDBTestCase {
         try dbQueue.inDatabase { db in
             let sql = "SELECT 'Arthur' AS firstName, 'Martin' AS lastName UNION ALL SELECT 'Barbara', 'Gourde'"
             let statement = try db.makeSelectStatement(sql: sql)
-            let cursor = statement.makeCursor()
+            let cursor = try statement.makeCursor()
             
             // Check that StatementCursor gives access to the raw SQLite API
             XCTAssertEqual(String(cString: sqlite3_column_name(cursor._statement.sqliteStatement, 0)), "firstName")
@@ -51,9 +40,9 @@ class SelectStatementTests : GRDBTestCase {
     
     func testStatementCursorStepFailure() throws {
         let dbQueue = try makeDatabaseQueue()
-        let customError = NSError(domain: "Custom", code: 0xDEAD)
-        dbQueue.add(function: DatabaseFunction("throw", argumentCount: 0, pure: true) { _ in throw customError })
         try dbQueue.inDatabase { db in
+            let customError = NSError(domain: "Custom", code: 0xDEAD)
+            db.add(function: DatabaseFunction("throw", argumentCount: 0, pure: true) { _ in throw customError })
             func test(_ cursor: StatementCursor) throws {
                 let sql = cursor._statement.sql
                 do {
@@ -63,7 +52,7 @@ class SelectStatementTests : GRDBTestCase {
                     XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                     XCTAssertEqual(error.message, "\(customError)")
                     XCTAssertEqual(error.sql!, sql)
-                    XCTAssertEqual(error.description, "SQLite error 1 with statement `\(sql)`: \(customError)")
+                    XCTAssertEqual(error.description, "SQLite error 1: \(customError) - while executing `\(sql)`")
                 }
                 do {
                     _ = try cursor.next()
@@ -138,21 +127,21 @@ class SelectStatementTests : GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                 XCTAssertEqual(error.message!, "no such table: blah")
                 XCTAssertEqual(error.sql!, "SELECT * FROM blah")
-                XCTAssertEqual(error.description, "SQLite error 1 with statement `SELECT * FROM blah`: no such table: blah")
+                XCTAssertEqual(error.description, "SQLite error 1: no such table: blah - while executing `SELECT * FROM blah`")
             }
         }
     }
 
     func testCachedSelectStatementStepFailure() throws {
         let dbQueue = try makeDatabaseQueue()
-        var needsThrow = false
-        dbQueue.add(function: DatabaseFunction("bomb", argumentCount: 0, pure: false) { _ in
-            if needsThrow {
-                throw DatabaseError(message: "boom")
-            }
-            return "success"
-        })
         try dbQueue.inDatabase { db in
+            var needsThrow = false
+            db.add(function: DatabaseFunction("bomb", argumentCount: 0, pure: false) { _ in
+                if needsThrow {
+                    throw DatabaseError(message: "boom")
+                }
+                return "success"
+            })
             let sql = "SELECT bomb()"
             
             needsThrow = false
@@ -166,7 +155,7 @@ class SelectStatementTests : GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                 XCTAssertEqual(error.message!, "boom")
                 XCTAssertEqual(error.sql!, sql)
-                XCTAssertEqual(error.description, "SQLite error 1 with statement `\(sql)`: boom")
+                XCTAssertEqual(error.description, "SQLite error 1: boom - while executing `\(sql)`")
             }
             
             needsThrow = false
@@ -187,7 +176,7 @@ class SelectStatementTests : GRDBTestCase {
                 }
                 
                 func observes(eventsOfKind eventKind: DatabaseEventKind) -> Bool {
-                    return region.isModified(byEventsOfKind: eventKind)
+                    region.isModified(byEventsOfKind: eventKind)
                 }
                 
                 func databaseDidChange(with event: DatabaseEvent) {
@@ -256,41 +245,41 @@ class SelectStatementTests : GRDBTestCase {
             try db.execute(sql: "INSERT INTO table3 (id) VALUES (1)")
             try db.execute(sql: "INSERT INTO table4 (id) VALUES (1)")
             try db.execute(sql: "INSERT INTO table1 (id, a, b, id3, id4) VALUES (NULL, 0, 0, 1, 1)")
-            XCTAssertEqual(observers.map { $0.triggered }, [true, true, true, true])
+            XCTAssertEqual(observers.map(\.triggered), [true, true, true, true])
             
             try db.execute(sql: "INSERT INTO table2 (id, a, b) VALUES (NULL, 0, 0)")
-            XCTAssertEqual(observers.map { $0.triggered }, [false, false, true, doubtfulCountFunction])
+            XCTAssertEqual(observers.map(\.triggered), [false, false, true, doubtfulCountFunction])
             
             try db.execute(sql: "UPDATE table1 SET a = 1")
-            XCTAssertEqual(observers.map { $0.triggered }, [true, true, true, true])
+            XCTAssertEqual(observers.map(\.triggered), [true, true, true, true])
             
             try db.execute(sql: "UPDATE table1 SET b = 1")
-            XCTAssertEqual(observers.map { $0.triggered }, [true, false, false, true])
+            XCTAssertEqual(observers.map(\.triggered), [true, false, false, true])
             
             try db.execute(sql: "UPDATE table2 SET a = 1")
-            XCTAssertEqual(observers.map { $0.triggered }, [false, false, true, doubtfulCountFunction])
+            XCTAssertEqual(observers.map(\.triggered), [false, false, true, doubtfulCountFunction])
             
             try db.execute(sql: "UPDATE table2 SET b = 1")
-            XCTAssertEqual(observers.map { $0.triggered }, [false, false, false, doubtfulCountFunction])
+            XCTAssertEqual(observers.map(\.triggered), [false, false, false, doubtfulCountFunction])
             
             try db.execute(sql: "UPDATE table3 SET id = 2 WHERE id = 1")
-            XCTAssertEqual(observers.map { $0.triggered }, [true, true, false, true])
+            XCTAssertEqual(observers.map(\.triggered), [true, true, false, true])
             
             try db.execute(sql: "UPDATE table4 SET id = 2 WHERE id = 1")
-            XCTAssertEqual(observers.map { $0.triggered }, [true, false, false, true])
+            XCTAssertEqual(observers.map(\.triggered), [true, false, false, true])
             
             try db.execute(sql: "DELETE FROM table4")
-            XCTAssertEqual(observers.map { $0.triggered }, [true, false, false, true])
+            XCTAssertEqual(observers.map(\.triggered), [true, false, false, true])
             
             try db.execute(sql: "INSERT INTO table4 (id) VALUES (1)")
             try db.execute(sql: "DELETE FROM table4")
-            XCTAssertEqual(observers.map { $0.triggered }, [false, false, false, doubtfulCountFunction])
+            XCTAssertEqual(observers.map(\.triggered), [false, false, false, doubtfulCountFunction])
             
             try db.execute(sql: "DELETE FROM table3")
-            XCTAssertEqual(observers.map { $0.triggered }, [true, true, true, true])
+            XCTAssertEqual(observers.map(\.triggered), [true, true, true, true])
             
             try db.execute(sql: "INSERT INTO table5 (id) VALUES (NULL)")
-            XCTAssertEqual(observers.map { $0.triggered }, [true, true, true, true])
+            XCTAssertEqual(observers.map(\.triggered), [true, true, true, true])
         }
     }
 }

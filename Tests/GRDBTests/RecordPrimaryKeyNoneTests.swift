@@ -1,12 +1,8 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 // Item has no primary key.
-private class Item : Record {
+private class Item : Record, Hashable {
     var name: String?
     var email: String?
     
@@ -29,7 +25,7 @@ private class Item : Record {
     // Record
     
     override class var databaseTableName: String {
-        return "items"
+        "items"
     }
     
     required init(row: Row) {
@@ -45,6 +41,15 @@ private class Item : Record {
     
     override func didInsert(with rowID: Int64, for column: String?) {
         insertedRowIDColumn = column
+    }
+    
+    static func == (lhs: Item, rhs: Item) -> Bool {
+        lhs.name == rhs.name && lhs.email == rhs.email
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(email)
     }
 }
 
@@ -71,10 +76,10 @@ class RecordPrimaryKeyNoneTests: GRDBTestCase {
             XCTAssertEqual(names, ["Table", "Table"])
         }
     }
-
-
+    
+    
     // MARK: - Save
-
+    
     func testSaveInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -86,8 +91,8 @@ class RecordPrimaryKeyNoneTests: GRDBTestCase {
             XCTAssertEqual(names, ["Table", "Table"])
         }
     }
-
-
+    
+    
     // MARK: - Fetch With Key
     
     func testFetchOneWithKey() throws {
@@ -101,7 +106,7 @@ class RecordPrimaryKeyNoneTests: GRDBTestCase {
             XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"items\" WHERE \"email\" = 'item@example.com'")
         }
     }
-
+    
     
     // MARK: - Fetch With Key Request
     
@@ -124,8 +129,7 @@ class RecordPrimaryKeyNoneTests: GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             let request = Item.orderByPrimaryKey()
-            let sqlRequest = try SQLRequest(db, request: request)
-            XCTAssertEqual(sqlRequest.sql, "SELECT * FROM \"items\" ORDER BY \"rowid\"")
+            try assertEqualSQL(db, request, "SELECT * FROM \"items\" ORDER BY \"rowid\"")
         }
     }
     
@@ -159,7 +163,7 @@ class RecordPrimaryKeyNoneTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testFetchAllWithPrimaryKeys() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -186,7 +190,34 @@ class RecordPrimaryKeyNoneTests: GRDBTestCase {
             }
         }
     }
-
+    
+    func testFetchSetWithPrimaryKeys() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = Item(name: "Table")
+            try record1.insert(db)
+            let id1 = db.lastInsertedRowID
+            let record2 = Item(name: "Chair")
+            try record2.insert(db)
+            let id2 = db.lastInsertedRowID
+            
+            do {
+                let ids: [Int64] = []
+                let fetchedRecords = try Item.fetchSet(db, keys: ids)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let ids = [id1, id2]
+                let fetchedRecords = try Item.fetchSet(db, keys: ids)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                let fetchedNames = Set(fetchedRecords.map { $0.name! })
+                let expectedNames = Set([record1, record2].map { $0.name! })
+                XCTAssertEqual(fetchedNames, expectedNames)
+            }
+        }
+    }
+    
     func testFetchOneWithPrimaryKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -207,7 +238,7 @@ class RecordPrimaryKeyNoneTests: GRDBTestCase {
             }
         }
     }
-
+    
     
     // MARK: - Fetch With Primary Key Request
     
@@ -252,6 +283,33 @@ class RecordPrimaryKeyNoneTests: GRDBTestCase {
             do {
                 let ids: [Int64] = []
                 let fetchedRecords = try Item.filter(keys: ids).fetchAll(db)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let ids = [id1, id2]
+                let fetchedRecords = try Item.filter(keys: ids).fetchAll(db)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                let fetchedNames = Set(fetchedRecords.map { $0.name! })
+                let expectedNames = Set([record1, record2].map { $0.name! })
+                XCTAssertEqual(fetchedNames, expectedNames)
+            }
+        }
+    }
+    
+    func testFetchSetWithPrimaryKeysRequest() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = Item(name: "Table")
+            try record1.insert(db)
+            let id1 = db.lastInsertedRowID
+            let record2 = Item(name: "Chair")
+            try record2.insert(db)
+            let id2 = db.lastInsertedRowID
+            
+            do {
+                let ids: [Int64] = []
+                let fetchedRecords = try Item.filter(keys: ids).fetchSet(db)
                 XCTAssertEqual(fetchedRecords.count, 0)
             }
             

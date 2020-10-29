@@ -8,13 +8,7 @@
          location = "group:Tour.playground">
       </FileRef>
       <FileRef
-         location = "group:JSONSynchronization.playground">
-      </FileRef>
-      <FileRef
          location = "group:TransactionObserver.playground">
-      </FileRef>
-      <FileRef
-         location = "group:Issue156.playground">
       </FileRef>
       <FileRef
          location = "group:CustomizedDecodingOfDatabaseRows.playground">
@@ -52,5 +46,8 @@
    </FileRef>
    <FileRef
       location = "group:Documentation/DemoApps/GRDBDemoiOS/GRDBDemoiOS.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Documentation/DemoApps/GRDBCombineDemo/GRDBCombineDemo.xcodeproj">
    </FileRef>
 </Workspace>

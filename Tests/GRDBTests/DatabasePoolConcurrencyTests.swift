@@ -1,10 +1,7 @@
 import XCTest
 import Dispatch
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import Foundation
+@testable import GRDB
 
 class DatabasePoolConcurrencyTests: GRDBTestCase {
     
@@ -239,7 +236,7 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                 XCTAssertEqual(error.message!, "cannot start a transaction within a transaction")
                 XCTAssertEqual(error.sql!, "BEGIN DEFERRED TRANSACTION")
-                XCTAssertEqual(error.description, "SQLite error 1 with statement `BEGIN DEFERRED TRANSACTION`: cannot start a transaction within a transaction")
+                XCTAssertEqual(error.description, "SQLite error 1: cannot start a transaction within a transaction - while executing `BEGIN DEFERRED TRANSACTION`")
             }
         }
     }
@@ -264,12 +261,14 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
                 XCTAssertEqual(error.resultCode, .SQLITE_ERROR)
                 XCTAssertEqual(error.message!, "cannot start a transaction within a transaction")
                 XCTAssertEqual(error.sql!, "BEGIN DEFERRED TRANSACTION")
-                XCTAssertEqual(error.description, "SQLite error 1 with statement `BEGIN DEFERRED TRANSACTION`: cannot start a transaction within a transaction")
+                XCTAssertEqual(error.description, "SQLite error 1: cannot start a transaction within a transaction - while executing `BEGIN DEFERRED TRANSACTION`")
             }
         }
     }
     
     func testReadError() throws {
+        // Necessary for this test to run as quickly as possible
+        dbConfiguration.readonlyBusyMode = .immediateError
         let dbPool = try makeDatabasePool()
         
         // Block 1                          Block 2
@@ -443,8 +442,8 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
                 defer { s2.signal() }
                 try dbPool.writeWithoutTransaction { db in
                     try db.execute(sql: "DELETE FROM items")
+                    try db.checkpoint()
                 }
-                try dbPool.checkpoint()
             } catch {
                 XCTFail("error: \(error)")
             }
@@ -481,10 +480,13 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
             try! dbPool.read { db in
                 s1.signal()
                 _ = s2.wait(timeout: .distantFuture)
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM items")!, 1)  // Not a bug. The writer did not start a transaction.
+                // We read 0 due to snaphot isolation: the reader has checked
+                // the schema version before `s1` could let the writer insert
+                // an item.
+                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM items")!, 0)
                 s3.signal()
                 _ = s4.wait(timeout: .distantFuture)
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM items")!, 1)
+                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM items")!, 0)
             }
         }
         let block2 = { () in
@@ -539,8 +541,8 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
                 defer { s2.signal() }
                 try dbPool.writeWithoutTransaction { db in
                     try db.execute(sql: "INSERT INTO items (id) VALUES (NULL)")
+                    try db.checkpoint()
                 }
-                try dbPool.checkpoint()
             } catch {
                 XCTFail("error: \(error)")
             }
@@ -760,8 +762,8 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
                 defer { s2.signal() }
                 try dbPool.writeWithoutTransaction { db in
                     try db.execute(sql: "DELETE FROM items")
+                    try db.checkpoint()
                 }
-                try dbPool.checkpoint()
             } catch {
                 XCTFail("error: \(error)")
             }
@@ -804,8 +806,8 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
                 defer { s2.signal() }
                 try dbPool.writeWithoutTransaction { db in
                     try db.execute(sql: "INSERT INTO items (id) VALUES (NULL)")
+                    try db.checkpoint()
                 }
-                try dbPool.checkpoint()
             } catch {
                 XCTFail("error: \(error)")
             }
@@ -873,6 +875,7 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
         let dbPool = try makeDatabasePool()
         dbPool.writeWithoutTransaction { db in
             XCTAssertEqual(db.configuration.label, nil)
+            XCTAssertEqual(db.description, "GRDB.DatabasePool.writer")
             
             // This test CAN break in future releases: the dispatch queue labels
             // are documented to be a debug-only tool.
@@ -885,6 +888,7 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
         let block1 = { () in
             try! dbPool.read { db in
                 XCTAssertEqual(db.configuration.label, nil)
+                XCTAssertEqual(db.description, "GRDB.DatabasePool.reader.1")
                 
                 // This test CAN break in future releases: the dispatch queue labels
                 // are documented to be a debug-only tool.
@@ -900,6 +904,7 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
             try! dbPool.read { db in
                 _ = s2.signal()
                 XCTAssertEqual(db.configuration.label, nil)
+                XCTAssertEqual(db.description, "GRDB.DatabasePool.reader.2")
                 
                 // This test CAN break in future releases: the dispatch queue labels
                 // are documented to be a debug-only tool.
@@ -918,6 +923,7 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
         let dbPool = try makeDatabasePool()
         dbPool.writeWithoutTransaction { db in
             XCTAssertEqual(db.configuration.label, "Toreador")
+            XCTAssertEqual(db.description, "Toreador.writer")
             
             // This test CAN break in future releases: the dispatch queue labels
             // are documented to be a debug-only tool.
@@ -930,6 +936,7 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
         let block1 = { () in
             try! dbPool.read { db in
                 XCTAssertEqual(db.configuration.label, "Toreador")
+                XCTAssertEqual(db.description, "Toreador.reader.1")
                 
                 // This test CAN break in future releases: the dispatch queue labels
                 // are documented to be a debug-only tool.
@@ -945,6 +952,7 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
             try! dbPool.read { db in
                 _ = s2.signal()
                 XCTAssertEqual(db.configuration.label, "Toreador")
+                XCTAssertEqual(db.description, "Toreador.reader.2")
                 
                 // This test CAN break in future releases: the dispatch queue labels
                 // are documented to be a debug-only tool.
@@ -959,71 +967,73 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
     }
     
     func testTargetQueue() throws {
-        // dispatchPrecondition(condition:) availability
-        if #available(OSX 10.12, iOS 10.0, tvOS 10.0, *) {
-            func test(targetQueue: DispatchQueue) throws {
-                dbConfiguration.targetQueue = targetQueue
-                let dbPool = try makeDatabasePool()
-                try dbPool.write { _ in
-                    dispatchPrecondition(condition: .onQueue(targetQueue))
-                }
-                try dbPool.read { _ in
-                    dispatchPrecondition(condition: .onQueue(targetQueue))
-                }
-            }
-            
-            // background queue
-            try test(targetQueue: .global(qos: .background))
-            
-            // main queue
-            let expectation = self.expectation(description: "main")
-            DispatchQueue.global(qos: .default).async {
-                try! test(targetQueue: .main)
-                expectation.fulfill()
-            }
-            waitForExpectations(timeout: 1, handler: nil)
+        guard #available(OSX 10.12, tvOS 10.0, *) else {
+            throw XCTSkip("dispatchPrecondition(condition:) is not available")
         }
+        
+        func test(targetQueue: DispatchQueue) throws {
+            dbConfiguration.targetQueue = targetQueue
+            let dbPool = try makeDatabasePool()
+            try dbPool.write { _ in
+                dispatchPrecondition(condition: .onQueue(targetQueue))
+            }
+            try dbPool.read { _ in
+                dispatchPrecondition(condition: .onQueue(targetQueue))
+            }
+        }
+        
+        // background queue
+        try test(targetQueue: .global(qos: .background))
+        
+        // main queue
+        let expectation = self.expectation(description: "main")
+        DispatchQueue.global(qos: .default).async {
+            try! test(targetQueue: .main)
+            expectation.fulfill()
+        }
+        waitForExpectations(timeout: 2, handler: nil)
     }
     
     func testQoS() throws {
-        // dispatchPrecondition(condition:) availability
-        if #available(OSX 10.12, iOS 10.0, tvOS 10.0, *) {
-            func test(qos: DispatchQoS) throws {
-                // https://forums.swift.org/t/what-is-the-default-target-queue-for-a-serial-queue/18094/5
-                //
-                // > [...] the default target queue [for a serial queue] is the
-                // > [default] overcommit [global concurrent] queue.
-                //
-                // We want this default target queue in order to test database QoS
-                // with dispatchPrecondition(condition:).
-                //
-                // > [...] You can get a reference to the overcommit queue by
-                // > dropping down to the C function dispatch_get_global_queue
-                // > (available in Swift with a __ prefix) and passing the private
-                // > value of DISPATCH_QUEUE_OVERCOMMIT.
-                // >
-                // > [...] Of course you should not do this in production code,
-                // > because DISPATCH_QUEUE_OVERCOMMIT is not a public API. I don't
-                // > know of a way to get a reference to the overcommit queue using
-                // > only public APIs.
-                let DISPATCH_QUEUE_OVERCOMMIT: UInt = 2
-                let targetQueue = __dispatch_get_global_queue(
-                    Int(qos.qosClass.rawValue.rawValue),
-                    DISPATCH_QUEUE_OVERCOMMIT)
-                
-                dbConfiguration.qos = qos
-                let dbPool = try makeDatabasePool()
-                try dbPool.write { _ in
-                    dispatchPrecondition(condition: .onQueue(targetQueue))
-                }
-                try dbPool.read { _ in
-                    dispatchPrecondition(condition: .onQueue(targetQueue))
-                }
-            }
-            
-            try test(qos: .background)
-            try test(qos: .userInitiated)
+        guard #available(OSX 10.12, tvOS 10.0, *) else {
+            throw XCTSkip("dispatchPrecondition(condition:) is not available")
         }
+        
+        func test(qos: DispatchQoS) throws {
+            // https://forums.swift.org/t/what-is-the-default-target-queue-for-a-serial-queue/18094/5
+            //
+            // > [...] the default target queue [for a serial queue] is the
+            // > [default] overcommit [global concurrent] queue.
+            //
+            // We want this default target queue in order to test database QoS
+            // with dispatchPrecondition(condition:).
+            //
+            // > [...] You can get a reference to the overcommit queue by
+            // > dropping down to the C function dispatch_get_global_queue
+            // > (available in Swift with a __ prefix) and passing the private
+            // > value of DISPATCH_QUEUE_OVERCOMMIT.
+            // >
+            // > [...] Of course you should not do this in production code,
+            // > because DISPATCH_QUEUE_OVERCOMMIT is not a public API. I don't
+            // > know of a way to get a reference to the overcommit queue using
+            // > only public APIs.
+            let DISPATCH_QUEUE_OVERCOMMIT: UInt = 2
+            let targetQueue = __dispatch_get_global_queue(
+                Int(qos.qosClass.rawValue.rawValue),
+                DISPATCH_QUEUE_OVERCOMMIT)
+            
+            dbConfiguration.qos = qos
+            let dbPool = try makeDatabasePool()
+            try dbPool.write { _ in
+                dispatchPrecondition(condition: .onQueue(targetQueue))
+            }
+            try dbPool.read { _ in
+                dispatchPrecondition(condition: .onQueue(targetQueue))
+            }
+        }
+        
+        try test(qos: .background)
+        try test(qos: .userInitiated)
     }
     
     // MARK: - ConcurrentRead
@@ -1076,6 +1086,8 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
     }
     
     func testConcurrentReadError() throws {
+        // Necessary for this test to run as quickly as possible
+        dbConfiguration.readonlyBusyMode = .immediateError
         let dbPool = try makeDatabasePool()
         try dbPool.writeWithoutTransaction { db in
             try db.execute(sql: "PRAGMA locking_mode=EXCLUSIVE")
@@ -1094,15 +1106,14 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
     
     // MARK: - AsyncConcurrentRead
     
-    #if compiler(>=5.0)
     func testAsyncConcurrentReadOpensATransaction() throws {
         let dbPool = try makeDatabasePool()
         var isInsideTransaction: Bool? = nil
         let expectation = self.expectation(description: "read")
         dbPool.writeWithoutTransaction { db in
-            dbPool.asyncConcurrentRead { result in
+            dbPool.asyncConcurrentRead { dbResult in
                 do {
-                    let db = try result.get()
+                    let db = try dbResult.get()
                     isInsideTransaction = db.isInsideTransaction
                     do {
                         try db.execute(sql: "BEGIN DEFERRED TRANSACTION")
@@ -1118,9 +1129,7 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
         waitForExpectations(timeout: 1, handler: nil)
         XCTAssertEqual(isInsideTransaction, true)
     }
-    #endif
     
-    #if compiler(>=5.0)
     func testAsyncConcurrentReadOutsideOfTransaction() throws {
         let dbPool = try makeDatabasePool()
         try dbPool.write { db in
@@ -1144,10 +1153,10 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
         var count: Int? = nil
         let expectation = self.expectation(description: "read")
         try dbPool.writeWithoutTransaction { db in
-            dbPool.asyncConcurrentRead { result in
+            dbPool.asyncConcurrentRead { dbResult in
                 do {
                     _ = s1.wait(timeout: .distantFuture)
-                    let db = try result.get()
+                    let db = try dbResult.get()
                     count = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM persons")!
                 } catch {
                     XCTFail("Unexpected error: \(error)")
@@ -1160,21 +1169,21 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
         waitForExpectations(timeout: 1, handler: nil)
         XCTAssertEqual(count, 0)
     }
-    #endif
     
-    #if compiler(>=5.0)
     func testAsyncConcurrentReadError() throws {
+        // Necessary for this test to run as quickly as possible
+        dbConfiguration.readonlyBusyMode = .immediateError
         let dbPool = try makeDatabasePool()
         var readError: DatabaseError? = nil
         let expectation = self.expectation(description: "read")
         try dbPool.writeWithoutTransaction { db in
             try db.execute(sql: "PRAGMA locking_mode=EXCLUSIVE")
             try db.execute(sql: "CREATE TABLE items (id INTEGER PRIMARY KEY)")
-            dbPool.asyncConcurrentRead { result in
-                guard case let .failure(error) = result,
+            dbPool.asyncConcurrentRead { dbResult in
+                guard case let .failure(error) = dbResult,
                     let dbError = error as? DatabaseError
                     else {
-                        XCTFail("Unexpected result: \(result)")
+                        XCTFail("Unexpected result: \(dbResult)")
                         return
                 }
                 readError = dbError
@@ -1185,95 +1194,187 @@ class DatabasePoolConcurrencyTests: GRDBTestCase {
             XCTAssertEqual(readError!.message!, "database is locked")
         }
     }
-    #endif
     
     // MARK: - Barrier
     
     func testBarrierLocksReads() throws {
-        if #available(OSX 10.10, *) {
-            let expectation = self.expectation(description: "lock")
-            expectation.isInverted = true
-            
-            let dbPool = try makeDatabasePool()
-            try dbPool.write { db in
-                try db.execute(sql: "CREATE TABLE items (id INTEGER PRIMARY KEY)")
-            }
-            var fetchedValue: Int?
-            let s1 = DispatchSemaphore(value: 0)
-            let s2 = DispatchSemaphore(value: 0)
-            let s3 = DispatchSemaphore(value: 0)
-            
-            DispatchQueue.global().async {
-                try! dbPool.barrierWriteWithoutTransaction { db in
-                    try db.execute(sql: "INSERT INTO items (id) VALUES (NULL)")
-                    s1.signal()
-                    s2.wait()
-                }
-            }
-            
-            DispatchQueue.global().async {
-                // Wait for barrier to start
-                s1.wait()
-                
-                fetchedValue = try! dbPool.read { db in
-                    try Int.fetchOne(db, sql: "SELECT id FROM items")!
-                }
-                expectation.fulfill()
-                s3.signal()
-            }
-            
-            // Assert that read is blocked
-            waitForExpectations(timeout: 1)
-            
-            // Release barrier
-            s2.signal()
-            
-            // Wait for read to complete
-            s3.wait()
-            XCTAssertEqual(fetchedValue, 1)
+        let expectation = self.expectation(description: "lock")
+        expectation.isInverted = true
+        
+        let dbPool = try makeDatabasePool()
+        try dbPool.write { db in
+            try db.execute(sql: "CREATE TABLE items (id INTEGER PRIMARY KEY)")
         }
+        var fetchedValue: Int?
+        let s1 = DispatchSemaphore(value: 0)
+        let s2 = DispatchSemaphore(value: 0)
+        let s3 = DispatchSemaphore(value: 0)
+        
+        DispatchQueue.global().async {
+            try! dbPool.barrierWriteWithoutTransaction { db in
+                try db.execute(sql: "INSERT INTO items (id) VALUES (NULL)")
+                s1.signal()
+                s2.wait()
+            }
+        }
+        
+        DispatchQueue.global().async {
+            // Wait for barrier to start
+            s1.wait()
+            
+            fetchedValue = try! dbPool.read { db in
+                try Int.fetchOne(db, sql: "SELECT id FROM items")!
+            }
+            expectation.fulfill()
+            s3.signal()
+        }
+        
+        // Assert that read is blocked
+        waitForExpectations(timeout: 1)
+        
+        // Release barrier
+        s2.signal()
+        
+        // Wait for read to complete
+        s3.wait()
+        XCTAssertEqual(fetchedValue, 1)
     }
     
     func testBarrierIsLockedByOneUnfinishedRead() throws {
-        if #available(OSX 10.10, *) {
-            let expectation = self.expectation(description: "lock")
-            expectation.isInverted = true
-            
-            let dbPool = try makeDatabasePool()
-            try dbPool.write { db in
-                try db.execute(sql: "CREATE TABLE items (id INTEGER PRIMARY KEY)")
+        let expectation = self.expectation(description: "lock")
+        expectation.isInverted = true
+        
+        let dbPool = try makeDatabasePool()
+        try dbPool.write { db in
+            try db.execute(sql: "CREATE TABLE items (id INTEGER PRIMARY KEY)")
+        }
+        
+        let s1 = DispatchSemaphore(value: 0)
+        let s2 = DispatchSemaphore(value: 0)
+        let s3 = DispatchSemaphore(value: 0)
+        let s4 = DispatchSemaphore(value: 0)
+        
+        DispatchQueue.global().async {
+            try! dbPool.read { _ in
+                s1.signal()
+                s2.signal()
+                s3.wait()
             }
+        }
+        
+        DispatchQueue.global().async {
+            // Wait for read to start
+            s1.wait()
             
-            let s1 = DispatchSemaphore(value: 0)
-            let s2 = DispatchSemaphore(value: 0)
-            let s3 = DispatchSemaphore(value: 0)
-            let s4 = DispatchSemaphore(value: 0)
-            
-            DispatchQueue.global().async {
-                try! dbPool.read { _ in
-                    s1.signal()
-                    s2.signal()
-                    s3.wait()
-                }
+            dbPool.barrierWriteWithoutTransaction { _ in }
+            expectation.fulfill()
+            s4.signal()
+        }
+        
+        // Assert that barrier is blocked
+        waitForExpectations(timeout: 1)
+        
+        // Release read
+        s3.signal()
+        
+        // Wait for barrier to complete
+        s4.wait()
+    }
+    
+    // MARK: - Concurrent opening
+    
+    func testConcurrentOpening() throws {
+        for _ in 0..<50 {
+            let dbDirectoryName = "DatabasePoolConcurrencyTests-\(ProcessInfo.processInfo.globallyUniqueString)"
+            let directoryURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+                .appendingPathComponent(dbDirectoryName, isDirectory: true)
+            let dbURL = directoryURL.appendingPathComponent("db.sqlite")
+            try FileManager.default.createDirectory(atPath: directoryURL.path, withIntermediateDirectories: true, attributes: nil)
+            defer { try! FileManager.default.removeItem(at: directoryURL) }
+            DispatchQueue.concurrentPerform(iterations: 10) { n in
+                // WTF I could never Google for the proper correct error handling
+                // of NSFileCoordinator. What a weird API.
+                let coordinator = NSFileCoordinator(filePresenter: nil)
+                var coordinatorError: NSError?
+                var poolError: Error?
+                coordinator.coordinate(writingItemAt: dbURL, options: .forMerging, error: &coordinatorError, byAccessor: { url in
+                    do {
+                        _ = try DatabasePool(path: url.path)
+                    } catch {
+                        poolError = error
+                    }
+                })
+                XCTAssert(poolError ?? coordinatorError == nil)
             }
-            
-            DispatchQueue.global().async {
-                // Wait for read to start
-                s1.wait()
-
-                dbPool.barrierWriteWithoutTransaction { _ in }
-                expectation.fulfill()
-                s4.signal()
+        }
+    }
+    
+    // MARK: - NSFileCoordinator sample code tests
+    
+    // Test for sample code in Documentation/SharingADatabase.md.
+    // This test passes if this method compiles
+    private func openSharedDatabase(at databaseURL: URL) throws -> DatabasePool {
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinatorError: NSError?
+        var dbPool: DatabasePool?
+        var dbError: Error?
+        coordinator.coordinate(writingItemAt: databaseURL, options: .forMerging, error: &coordinatorError, byAccessor: { url in
+            do {
+                dbPool = try openDatabase(at: url)
+            } catch {
+                dbError = error
             }
-            
-            // Assert that barrier is blocked
-            waitForExpectations(timeout: 1)
-            
-            // Release read
-            s3.signal()
-            
-            // Wait for barrier to complete
-            s4.wait()
+        })
+        if let error = dbError ?? coordinatorError {
+            throw error
+        }
+        return dbPool!
+    }
+    
+    // Test for sample code in Documentation/SharingADatabase.md.
+    // This test passes if this method compiles
+    private func openDatabase(at databaseURL: URL) throws -> DatabasePool {
+        let dbPool = try DatabasePool(path: databaseURL.path)
+        // Perform here other database setups, such as defining
+        // the database schema with a DatabaseMigrator.
+        return dbPool
+    }
+    
+    // Test for sample code in Documentation/SharingADatabase.md.
+    // This test passes if this method compiles
+    private func openSharedReadOnlyDatabase(at databaseURL: URL) throws -> DatabasePool? {
+        let coordinator = NSFileCoordinator(filePresenter: nil)
+        var coordinatorError: NSError?
+        var dbPool: DatabasePool?
+        var dbError: Error?
+        coordinator.coordinate(readingItemAt: databaseURL, options: .withoutChanges, error: &coordinatorError, byAccessor: { url in
+            do {
+                dbPool = try openReadOnlyDatabase(at: url)
+            } catch {
+                dbError = error
+            }
+        })
+        if let error = dbError ?? coordinatorError {
+            throw error
+        }
+        return dbPool
+    }
+    
+    // Test for sample code in Documentation/SharingADatabase.md.
+    // This test passes if this method compiles
+    private func openReadOnlyDatabase(at databaseURL: URL) throws -> DatabasePool? {
+        do {
+            var configuration = Configuration()
+            configuration.readonly = true
+            return try DatabasePool(path: databaseURL.path, configuration: configuration)
+        } catch {
+            if FileManager.default.fileExists(atPath: databaseURL.path) {
+                // Something went wrong
+                throw error
+            } else {
+                // Database file does not exist
+                return nil
+            }
         }
     }
 }

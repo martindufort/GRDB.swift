@@ -1,14 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    #if SWIFT_PACKAGE
-        import CSQLite
-    #else
-        import SQLite3
-    #endif
-    import GRDB
-#endif
+import GRDB
 
 private struct Parent: TableRecord, FetchableRecord, Decodable, Equatable {
     static let children = hasMany(Child.self)
@@ -28,341 +19,302 @@ private struct ParentInfo: FetchableRecord, Decodable, Equatable {
 }
 
 class ValueObservationQueryInterfaceRequestTests: GRDBTestCase {
-    override func setup(_ dbWriter: DatabaseWriter) throws {
-        try dbWriter.write { db in
-            try db.create(table: "parent") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("name", .text)
-            }
-            try db.create(table: "child") { t in
-                t.autoIncrementedPrimaryKey("id")
-                t.column("parentId", .integer).references("parent", onDelete: .cascade)
-                t.column("name", .text)
-            }
+    private func setup(_ db: Database) throws {
+        try db.create(table: "parent") { t in
+            t.autoIncrementedPrimaryKey("id")
+            t.column("name", .text)
+        }
+        try db.create(table: "child") { t in
+            t.autoIncrementedPrimaryKey("id")
+            t.column("parentId", .integer).references("parent", onDelete: .cascade)
+            t.column("name", .text)
+        }
+    }
+    
+    private func performDatabaseModifications(_ db: Database) throws {
+        try db.inTransaction {
             try db.execute(sql: """
                 INSERT INTO parent (id, name) VALUES (1, 'foo');
                 INSERT INTO parent (id, name) VALUES (2, 'bar');
+                """)
+            return .commit
+        }
+        try db.inTransaction {
+            try db.execute(sql: """
                 INSERT INTO child (id, parentId, name) VALUES (1, 1, 'fooA');
                 INSERT INTO child (id, parentId, name) VALUES (2, 1, 'fooB');
                 INSERT INTO child (id, parentId, name) VALUES (3, 2, 'barA');
                 """)
+            return .commit
         }
-    }
-    
-    func testOneRowWithPrefetchedRowsDeprecated() throws {
-        let dbQueue = try makeDatabaseQueue()
-        
-        var results: [Row?] = []
-        let notificationExpectation = expectation(description: "notification")
-        notificationExpectation.assertForOverFulfill = true
-        notificationExpectation.expectedFulfillmentCount = 2
-        
-        let request = Parent
-            .including(all: Parent.children.orderByPrimaryKey())
-            .orderByPrimaryKey()
-            .asRequest(of: Row.self)
-        let observation = ValueObservation.trackingOne(request)
-        let observer = try observation.start(in: dbQueue) { row in
-            results.append(row)
-            notificationExpectation.fulfill()
+        try db.inTransaction {
+            try db.execute(sql: """
+                UPDATE child SET name = 'fooA2' WHERE id = 1;
+                """)
+            return .commit
         }
-        try withExtendedLifetime(observer) {
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "DELETE FROM child")
-            }
-            
-            waitForExpectations(timeout: 1, handler: nil)
-            XCTAssertEqual(results.count, 2)
-            
-            XCTAssertEqual(results[0]!.unscoped, ["id": 1, "name": "foo"])
-            XCTAssertEqual(results[0]!.prefetchedRows["children"], [
-                ["id": 1, "parentId": 1, "name": "fooA", "grdb_parentId": 1],
-                ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
-            
-            XCTAssertEqual(results[1]!.unscoped, ["id": 1, "name": "foo"])
-            XCTAssertEqual(results[1]!.prefetchedRows["children"], [])
+        try db.inTransaction {
+            try db.execute(sql: """
+                INSERT INTO parent (id, name) VALUES (3, 'baz');
+                INSERT INTO child (id, parentId, name) VALUES (4, 3, 'bazA');
+                """)
+            return .commit
+        }
+        try db.inTransaction {
+            try db.execute(sql: """
+                DELETE FROM parent WHERE id = 1;
+                DELETE FROM child;
+                """)
+            return .commit
         }
     }
     
     func testOneRowWithPrefetchedRows() throws {
         let dbQueue = try makeDatabaseQueue()
-        
-        var results: [Row?] = []
-        let notificationExpectation = expectation(description: "notification")
-        notificationExpectation.assertForOverFulfill = true
-        notificationExpectation.expectedFulfillmentCount = 2
-        
+        try dbQueue.write(setup)
         let request = Parent
             .including(all: Parent.children.orderByPrimaryKey())
             .orderByPrimaryKey()
             .asRequest(of: Row.self)
-        let observation = request.observationForFirst()
-        let observer = try observation.start(in: dbQueue) { row in
-            results.append(row)
-            notificationExpectation.fulfill()
-        }
-        try withExtendedLifetime(observer) {
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "DELETE FROM child")
-            }
-            
-            waitForExpectations(timeout: 1, handler: nil)
-            XCTAssertEqual(results.count, 2)
-            
-            XCTAssertEqual(results[0]!.unscoped, ["id": 1, "name": "foo"])
-            XCTAssertEqual(results[0]!.prefetchedRows["children"], [
-                ["id": 1, "parentId": 1, "name": "fooA", "grdb_parentId": 1],
-                ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
-            
-            XCTAssertEqual(results[1]!.unscoped, ["id": 1, "name": "foo"])
-            XCTAssertEqual(results[1]!.prefetchedRows["children"], [])
-        }
-    }
-
-    func testAllRowsWithPrefetchedRowsDeprecated() throws {
-        let dbQueue = try makeDatabaseQueue()
+        let observation = ValueObservation.tracking(request.fetchOne)
         
-        var results: [[Row]] = []
-        let notificationExpectation = expectation(description: "notification")
-        notificationExpectation.assertForOverFulfill = true
-        notificationExpectation.expectedFulfillmentCount = 2
+        let recorder = observation.record(in: dbQueue)
+        try dbQueue.writeWithoutTransaction(performDatabaseModifications)
+        let results = try wait(for: recorder.next(6), timeout: 1)
         
-        let request = Parent
-            .including(all: Parent.children.orderByPrimaryKey())
-            .orderByPrimaryKey()
-            .asRequest(of: Row.self)
-        let observation = ValueObservation.trackingAll(request)
-        let observer = try observation.start(in: dbQueue) { rows in
-            results.append(rows)
-            notificationExpectation.fulfill()
-        }
-        try withExtendedLifetime(observer) {
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "DELETE FROM child")
-            }
-            
-            waitForExpectations(timeout: 1, handler: nil)
-            XCTAssertEqual(results.count, 2)
-            
-            XCTAssertEqual(results[0].count, 2)
-            XCTAssertEqual(results[0][0].unscoped, ["id": 1, "name": "foo"])
-            XCTAssertEqual(results[0][0].prefetchedRows["children"], [
-                ["id": 1, "parentId": 1, "name": "fooA", "grdb_parentId": 1],
-                ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
-            XCTAssertEqual(results[0][1].unscoped, ["id": 2, "name": "bar"])
-            XCTAssertEqual(results[0][1].prefetchedRows["children"], [
-                ["id": 3, "parentId": 2, "name": "barA", "grdb_parentId": 2]])
-            
-            XCTAssertEqual(results[1].count, 2)
-            XCTAssertEqual(results[1][0].unscoped, ["id": 1, "name": "foo"])
-            XCTAssertEqual(results[1][0].prefetchedRows["children"], [])
-            XCTAssertEqual(results[1][1].unscoped, ["id": 2, "name": "bar"])
-            XCTAssertEqual(results[1][1].prefetchedRows["children"], [])
-        }
-    }
-
-    func testAllRowsWithPrefetchedRows() throws {
-        let dbQueue = try makeDatabaseQueue()
+        XCTAssertNil(results[0])
         
-        var results: [[Row]] = []
-        let notificationExpectation = expectation(description: "notification")
-        notificationExpectation.assertForOverFulfill = true
-        notificationExpectation.expectedFulfillmentCount = 2
+        XCTAssertEqual(results[1]!.unscoped, ["id": 1, "name": "foo"])
+        XCTAssertEqual(results[1]!.prefetchedRows["children"], [])
         
-        let request = Parent
-            .including(all: Parent.children.orderByPrimaryKey())
-            .orderByPrimaryKey()
-            .asRequest(of: Row.self)
-        let observation = request.observationForAll()
-        let observer = try observation.start(in: dbQueue) { rows in
-            results.append(rows)
-            notificationExpectation.fulfill()
-        }
-        try withExtendedLifetime(observer) {
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "DELETE FROM child")
-            }
-            
-            waitForExpectations(timeout: 1, handler: nil)
-            XCTAssertEqual(results.count, 2)
-            
-            XCTAssertEqual(results[0].count, 2)
-            XCTAssertEqual(results[0][0].unscoped, ["id": 1, "name": "foo"])
-            XCTAssertEqual(results[0][0].prefetchedRows["children"], [
-                ["id": 1, "parentId": 1, "name": "fooA", "grdb_parentId": 1],
-                ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
-            XCTAssertEqual(results[0][1].unscoped, ["id": 2, "name": "bar"])
-            XCTAssertEqual(results[0][1].prefetchedRows["children"], [
-                ["id": 3, "parentId": 2, "name": "barA", "grdb_parentId": 2]])
-            
-            XCTAssertEqual(results[1].count, 2)
-            XCTAssertEqual(results[1][0].unscoped, ["id": 1, "name": "foo"])
-            XCTAssertEqual(results[1][0].prefetchedRows["children"], [])
-            XCTAssertEqual(results[1][1].unscoped, ["id": 2, "name": "bar"])
-            XCTAssertEqual(results[1][1].prefetchedRows["children"], [])
-        }
-    }
-
-    func testOneRecordWithPrefetchedRowsDeprecated() throws {
-        let dbQueue = try makeDatabaseQueue()
-
-        var results: [ParentInfo?] = []
-        let notificationExpectation = expectation(description: "notification")
-        notificationExpectation.assertForOverFulfill = true
-        notificationExpectation.expectedFulfillmentCount = 2
-
-        let request = Parent
-            .including(all: Parent.children.orderByPrimaryKey())
-            .orderByPrimaryKey()
-            .asRequest(of: ParentInfo.self)
-        let observation = ValueObservation.trackingOne(request)
-        let observer = try observation.start(in: dbQueue) { parentInfo in
-            results.append(parentInfo)
-            notificationExpectation.fulfill()
-        }
-        try withExtendedLifetime(observer) {
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "DELETE FROM child")
-            }
-
-            waitForExpectations(timeout: 1, handler: nil)
-            XCTAssertEqual(results, [
-                ParentInfo(
-                    parent: Parent(id: 1, name: "foo"),
-                    children: [
-                        Child(id: 1, parentId: 1, name: "fooA"),
-                        Child(id: 2, parentId: 1, name: "fooB"),
-                    ]),
-                ParentInfo(
-                    parent: Parent(id: 1, name: "foo"),
-                    children: []),
-                ])
-        }
-    }
-
-    func testOneRecordWithPrefetchedRows() throws {
-        let dbQueue = try makeDatabaseQueue()
+        XCTAssertEqual(results[2]!.unscoped, ["id": 1, "name": "foo"])
+        XCTAssertEqual(results[2]!.prefetchedRows["children"], [
+            ["id": 1, "parentId": 1, "name": "fooA", "grdb_parentId": 1],
+            ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
         
-        var results: [ParentInfo?] = []
-        let notificationExpectation = expectation(description: "notification")
-        notificationExpectation.assertForOverFulfill = true
-        notificationExpectation.expectedFulfillmentCount = 2
+        XCTAssertEqual(results[3]!.unscoped, ["id": 1, "name": "foo"])
+        XCTAssertEqual(results[3]!.prefetchedRows["children"], [
+            ["id": 1, "parentId": 1, "name": "fooA2", "grdb_parentId": 1],
+            ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
         
-        let request = Parent
-            .including(all: Parent.children.orderByPrimaryKey())
-            .orderByPrimaryKey()
-            .asRequest(of: ParentInfo.self)
-        let observation = request.observationForFirst()
-        let observer = try observation.start(in: dbQueue) { parentInfo in
-            results.append(parentInfo)
-            notificationExpectation.fulfill()
-        }
-        try withExtendedLifetime(observer) {
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "DELETE FROM child")
-            }
-            
-            waitForExpectations(timeout: 1, handler: nil)
-            XCTAssertEqual(results, [
-                ParentInfo(
-                    parent: Parent(id: 1, name: "foo"),
-                    children: [
-                        Child(id: 1, parentId: 1, name: "fooA"),
-                        Child(id: 2, parentId: 1, name: "fooB"),
-                    ]),
-                ParentInfo(
-                    parent: Parent(id: 1, name: "foo"),
-                    children: []),
-                ])
-        }
+        XCTAssertEqual(results[4]!.unscoped, ["id": 1, "name": "foo"])
+        XCTAssertEqual(results[4]!.prefetchedRows["children"], [
+            ["id": 1, "parentId": 1, "name": "fooA2", "grdb_parentId": 1],
+            ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
+        
+        XCTAssertEqual(results[5]!.unscoped, ["id": 2, "name": "bar"])
+        XCTAssertEqual(results[5]!.prefetchedRows["children"], [])
     }
     
-    func testAllRecordsWithPrefetchedRowsDeprecated() throws {
+    func testAllRowsWithPrefetchedRows() throws {
         let dbQueue = try makeDatabaseQueue()
-        
-        var results: [[ParentInfo]] = []
-        let notificationExpectation = expectation(description: "notification")
-        notificationExpectation.assertForOverFulfill = true
-        notificationExpectation.expectedFulfillmentCount = 2
-        
+        try dbQueue.write(setup)
         let request = Parent
             .including(all: Parent.children.orderByPrimaryKey())
             .orderByPrimaryKey()
-            .asRequest(of: ParentInfo.self)
-        let observation = ValueObservation.trackingAll(request)
-        let observer = try observation.start(in: dbQueue) { parentInfos in
-            results.append(parentInfos)
-            notificationExpectation.fulfill()
-        }
-        try withExtendedLifetime(observer) {
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "DELETE FROM child")
-            }
-            
-            waitForExpectations(timeout: 1, handler: nil)
-            XCTAssertEqual(results, [
-                [
-                    ParentInfo(
-                        parent: Parent(id: 1, name: "foo"),
-                        children: [
-                            Child(id: 1, parentId: 1, name: "fooA"),
-                            Child(id: 2, parentId: 1, name: "fooB"),
-                        ]),
-                    ParentInfo(
-                        parent: Parent(id: 2, name: "bar"),
-                        children: [
-                            Child(id: 3, parentId: 2, name: "barA"),
-                        ]),
-                ],
-                [
-                    ParentInfo(
-                        parent: Parent(id: 1, name: "foo"),
-                        children: []),
-                    ParentInfo(
-                        parent: Parent(id: 2, name: "bar"),
-                        children: []),
-                ],
-                ])
-        }
+            .asRequest(of: Row.self)
+        let observation = ValueObservation.tracking(request.fetchAll)
+        
+        let recorder = observation.record(in: dbQueue)
+        try dbQueue.writeWithoutTransaction(performDatabaseModifications)
+        let results = try wait(for: recorder.next(6), timeout: 1)
+        
+        XCTAssertEqual(results[0].count, 0)
+        
+        XCTAssertEqual(results[1].count, 2)
+        XCTAssertEqual(results[1][0].unscoped, ["id": 1, "name": "foo"])
+        XCTAssertEqual(results[1][0].prefetchedRows["children"], [])
+        XCTAssertEqual(results[1][1].unscoped, ["id": 2, "name": "bar"])
+        XCTAssertEqual(results[1][1].prefetchedRows["children"], [])
+        
+        XCTAssertEqual(results[2].count, 2)
+        XCTAssertEqual(results[2][0].unscoped, ["id": 1, "name": "foo"])
+        XCTAssertEqual(results[2][0].prefetchedRows["children"], [
+            ["id": 1, "parentId": 1, "name": "fooA", "grdb_parentId": 1],
+            ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
+        XCTAssertEqual(results[2][1].unscoped, ["id": 2, "name": "bar"])
+        XCTAssertEqual(results[2][1].prefetchedRows["children"], [
+            ["id": 3, "parentId": 2, "name": "barA", "grdb_parentId": 2]])
+        
+        XCTAssertEqual(results[3].count, 2)
+        XCTAssertEqual(results[3][0].unscoped, ["id": 1, "name": "foo"])
+        XCTAssertEqual(results[3][0].prefetchedRows["children"], [
+            ["id": 1, "parentId": 1, "name": "fooA2", "grdb_parentId": 1],
+            ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
+        XCTAssertEqual(results[3][1].unscoped, ["id": 2, "name": "bar"])
+        XCTAssertEqual(results[3][1].prefetchedRows["children"], [
+            ["id": 3, "parentId": 2, "name": "barA", "grdb_parentId": 2]])
+        
+        XCTAssertEqual(results[4].count, 3)
+        XCTAssertEqual(results[4][0].unscoped, ["id": 1, "name": "foo"])
+        XCTAssertEqual(results[4][0].prefetchedRows["children"], [
+            ["id": 1, "parentId": 1, "name": "fooA2", "grdb_parentId": 1],
+            ["id": 2, "parentId": 1, "name": "fooB", "grdb_parentId": 1]])
+        XCTAssertEqual(results[4][1].unscoped, ["id": 2, "name": "bar"])
+        XCTAssertEqual(results[4][1].prefetchedRows["children"], [
+            ["id": 3, "parentId": 2, "name": "barA", "grdb_parentId": 2]])
+        XCTAssertEqual(results[4][2].unscoped, ["id": 3, "name": "baz"])
+        XCTAssertEqual(results[4][2].prefetchedRows["children"], [
+            ["id": 4, "parentId": 3, "name": "bazA", "grdb_parentId": 3]])
+        
+        XCTAssertEqual(results[5].count, 2)
+        XCTAssertEqual(results[5][0].unscoped, ["id": 2, "name": "bar"])
+        XCTAssertEqual(results[5][0].prefetchedRows["children"], [])
+        XCTAssertEqual(results[5][1].unscoped, ["id": 3, "name": "baz"])
+        XCTAssertEqual(results[5][1].prefetchedRows["children"], [])
     }
-
-    func testAllRecordsWithPrefetchedRows() throws {
-        let dbQueue = try makeDatabaseQueue()
-
-        var results: [[ParentInfo]] = []
-        let notificationExpectation = expectation(description: "notification")
-        notificationExpectation.assertForOverFulfill = true
-        notificationExpectation.expectedFulfillmentCount = 2
-
+    
+    func testOneRecordWithPrefetchedRows() throws {
         let request = Parent
             .including(all: Parent.children.orderByPrimaryKey())
             .orderByPrimaryKey()
             .asRequest(of: ParentInfo.self)
-        let observation = request.observationForAll()
-        let observer = try observation.start(in: dbQueue) { parentInfos in
-            results.append(parentInfos)
-            notificationExpectation.fulfill()
-        }
-        try withExtendedLifetime(observer) {
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "DELETE FROM child")
-            }
-
-            waitForExpectations(timeout: 1, handler: nil)
-            XCTAssertEqual(results, [
+        
+        try assertValueObservation(
+            ValueObservation.tracking(request.fetchOne),
+            records: [
+                nil,
+                ParentInfo(
+                    parent: Parent(id: 1, name: "foo"),
+                    children: []),
+                ParentInfo(
+                    parent: Parent(id: 1, name: "foo"),
+                    children: [
+                        Child(id: 1, parentId: 1, name: "fooA"),
+                        Child(id: 2, parentId: 1, name: "fooB"),
+                ]),
+                ParentInfo(
+                    parent: Parent(id: 1, name: "foo"),
+                    children: [
+                        Child(id: 1, parentId: 1, name: "fooA2"),
+                        Child(id: 2, parentId: 1, name: "fooB"),
+                ]),
+                ParentInfo(
+                    parent: Parent(id: 1, name: "foo"),
+                    children: [
+                        Child(id: 1, parentId: 1, name: "fooA2"),
+                        Child(id: 2, parentId: 1, name: "fooB"),
+                ]),
+                ParentInfo(
+                    parent: Parent(id: 2, name: "bar"),
+                    children: []),
+            ],
+            setup: setup,
+            recordedUpdates: performDatabaseModifications)
+        
+        // The fundamental technique for removing duplicates of non-Equatable types
+        try assertValueObservation(
+            ValueObservation
+                .tracking { db in try Row.fetchOne(db, request) }
+                .removeDuplicates()
+                .map { row in row.map(ParentInfo.init(row:)) },
+            records: [
+                nil,
+                ParentInfo(
+                    parent: Parent(id: 1, name: "foo"),
+                    children: []),
+                ParentInfo(
+                    parent: Parent(id: 1, name: "foo"),
+                    children: [
+                        Child(id: 1, parentId: 1, name: "fooA"),
+                        Child(id: 2, parentId: 1, name: "fooB"),
+                ]),
+                ParentInfo(
+                    parent: Parent(id: 1, name: "foo"),
+                    children: [
+                        Child(id: 1, parentId: 1, name: "fooA2"),
+                        Child(id: 2, parentId: 1, name: "fooB"),
+                ]),
+                ParentInfo(
+                    parent: Parent(id: 2, name: "bar"),
+                    children: []),
+            ],
+            setup: setup,
+            recordedUpdates: performDatabaseModifications)
+    }
+    
+    func testAllRecordsWithPrefetchedRows() throws {
+        let request = Parent
+            .including(all: Parent.children.orderByPrimaryKey())
+            .orderByPrimaryKey()
+            .asRequest(of: ParentInfo.self)
+        
+        try assertValueObservation(
+            ValueObservation.tracking(request.fetchAll),
+            records: [
+                [],
+                [
+                    ParentInfo(
+                        parent: Parent(id: 1, name: "foo"),
+                        children: []),
+                    ParentInfo(
+                        parent: Parent(id: 2, name: "bar"),
+                        children: []),
+                ],
                 [
                     ParentInfo(
                         parent: Parent(id: 1, name: "foo"),
                         children: [
                             Child(id: 1, parentId: 1, name: "fooA"),
                             Child(id: 2, parentId: 1, name: "fooB"),
-                        ]),
+                    ]),
                     ParentInfo(
                         parent: Parent(id: 2, name: "bar"),
                         children: [
                             Child(id: 3, parentId: 2, name: "barA"),
-                        ]),
+                    ]),
                 ],
+                [
+                    ParentInfo(
+                        parent: Parent(id: 1, name: "foo"),
+                        children: [
+                            Child(id: 1, parentId: 1, name: "fooA2"),
+                            Child(id: 2, parentId: 1, name: "fooB"),
+                    ]),
+                    ParentInfo(
+                        parent: Parent(id: 2, name: "bar"),
+                        children: [
+                            Child(id: 3, parentId: 2, name: "barA"),
+                    ]),
+                ],
+                [
+                    ParentInfo(
+                        parent: Parent(id: 1, name: "foo"),
+                        children: [
+                            Child(id: 1, parentId: 1, name: "fooA2"),
+                            Child(id: 2, parentId: 1, name: "fooB"),
+                    ]),
+                    ParentInfo(
+                        parent: Parent(id: 2, name: "bar"),
+                        children: [
+                            Child(id: 3, parentId: 2, name: "barA"),
+                    ]),
+                    ParentInfo(
+                        parent: Parent(id: 3, name: "baz"),
+                        children: [
+                            Child(id: 4, parentId: 3, name: "bazA"),
+                    ]),
+                ],
+                [
+                    ParentInfo(
+                        parent: Parent(id: 2, name: "bar"),
+                        children: []),
+                    ParentInfo(
+                        parent: Parent(id: 3, name: "baz"),
+                        children: []),
+                ],
+            ],
+            setup: setup,
+            recordedUpdates: performDatabaseModifications)
+        
+        // The fundamental technique for removing duplicates of non-Equatable types
+        try assertValueObservation(
+            ValueObservation
+                .tracking { db in try Row.fetchAll(db, request) }
+                .removeDuplicates()
+                .map { rows in rows.map(ParentInfo.init(row:)) },
+            records: [
+                [],
                 [
                     ParentInfo(
                         parent: Parent(id: 1, name: "foo"),
@@ -371,7 +323,60 @@ class ValueObservationQueryInterfaceRequestTests: GRDBTestCase {
                         parent: Parent(id: 2, name: "bar"),
                         children: []),
                 ],
-                ])
-        }
+                [
+                    ParentInfo(
+                        parent: Parent(id: 1, name: "foo"),
+                        children: [
+                            Child(id: 1, parentId: 1, name: "fooA"),
+                            Child(id: 2, parentId: 1, name: "fooB"),
+                    ]),
+                    ParentInfo(
+                        parent: Parent(id: 2, name: "bar"),
+                        children: [
+                            Child(id: 3, parentId: 2, name: "barA"),
+                    ]),
+                ],
+                [
+                    ParentInfo(
+                        parent: Parent(id: 1, name: "foo"),
+                        children: [
+                            Child(id: 1, parentId: 1, name: "fooA2"),
+                            Child(id: 2, parentId: 1, name: "fooB"),
+                    ]),
+                    ParentInfo(
+                        parent: Parent(id: 2, name: "bar"),
+                        children: [
+                            Child(id: 3, parentId: 2, name: "barA"),
+                    ]),
+                ],
+                [
+                    ParentInfo(
+                        parent: Parent(id: 1, name: "foo"),
+                        children: [
+                            Child(id: 1, parentId: 1, name: "fooA2"),
+                            Child(id: 2, parentId: 1, name: "fooB"),
+                    ]),
+                    ParentInfo(
+                        parent: Parent(id: 2, name: "bar"),
+                        children: [
+                            Child(id: 3, parentId: 2, name: "barA"),
+                    ]),
+                    ParentInfo(
+                        parent: Parent(id: 3, name: "baz"),
+                        children: [
+                            Child(id: 4, parentId: 3, name: "bazA"),
+                    ]),
+                ],
+                [
+                    ParentInfo(
+                        parent: Parent(id: 2, name: "bar"),
+                        children: []),
+                    ParentInfo(
+                        parent: Parent(id: 3, name: "baz"),
+                        children: []),
+                ],
+            ],
+            setup: setup,
+            recordedUpdates: performDatabaseModifications)
     }
 }

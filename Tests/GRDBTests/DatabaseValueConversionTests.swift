@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 // TODO: test conversions from invalid UTF-8 blob to string
 
@@ -29,11 +25,7 @@ private extension DatabaseValue {
 
 private let emojiString = "'fooéı👨👨🏿🇫🇷🇨🇮'"
 private let emojiData = emojiString.data(using: .utf8)
-#if swift(>=5.0)
 private let nonUTF8Data = Data([0x80])
-#else
-private let nonUTF8Data = Data(bytes: [0x80])
-#endif
 private let invalidString = "\u{FFFD}" // decoded from nonUTF8Data
 // Until SPM tests can load resources, disable this test for SPM.
 #if !SWIFT_PACKAGE
@@ -42,14 +34,14 @@ private let jpegData = try! Data(contentsOf: Bundle(for: DatabaseValueConversion
 
 class DatabaseValueConversionTests : GRDBTestCase {
     
-    private func assertDecoding<T: DatabaseValueConvertible & StatementColumnConvertible & Equatable>(
+    private func _assertDecoding<T: DatabaseValueConvertible & StatementColumnConvertible & Equatable>(
         _ db: Database,
         _ sql: String,
         _ type: T.Type,
         expectedSQLiteConversion: T?,
         expectedDatabaseValueConversion: T?,
-        file: StaticString = #file,
-        line: UInt = #line) throws
+        file: StaticString,
+        line: UInt) throws
     {
         func stringRepresentation(_ value: T?) -> String {
             guard let value = value else { return "nil" }
@@ -94,12 +86,12 @@ class DatabaseValueConversionTests : GRDBTestCase {
         }
     }
     
-    private func assertFailedDecoding<T: DatabaseValueConvertible>(
+    private func _assertFailedDecoding<T: DatabaseValueConvertible>(
         _ db: Database,
         _ sql: String,
         _ type: T.Type,
-        file: StaticString = #file,
-        line: UInt = #line) throws
+        file: StaticString,
+        line: UInt) throws
     {
         // We can only test failed decoding from database value, since
         // StatementColumnConvertible only supports optimistic decoding which
@@ -107,6 +99,61 @@ class DatabaseValueConversionTests : GRDBTestCase {
         let dbValue = try DatabaseValue.fetchOne(db, sql: sql)!
         XCTAssertNil(T.fromDatabaseValue(dbValue), file: file, line: line)
     }
+    
+    // #file vs. #filePath dance
+    #if compiler(>=5.3)
+    private func assertDecoding<T: DatabaseValueConvertible & StatementColumnConvertible & Equatable>(
+        _ db: Database,
+        _ sql: String,
+        _ type: T.Type,
+        expectedSQLiteConversion: T?,
+        expectedDatabaseValueConversion: T?,
+        file: StaticString = #filePath,
+        line: UInt = #line) throws
+    {
+        try _assertDecoding(
+            db, sql, type,
+            expectedSQLiteConversion: expectedSQLiteConversion,
+            expectedDatabaseValueConversion: expectedDatabaseValueConversion,
+            file: file, line: line)
+    }
+    
+    private func assertFailedDecoding<T: DatabaseValueConvertible>(
+        _ db: Database,
+        _ sql: String,
+        _ type: T.Type,
+        file: StaticString = #filePath,
+        line: UInt = #line) throws
+    {
+        try _assertFailedDecoding(db, sql, type, file: file, line: line)
+    }
+    #else
+    private func assertDecoding<T: DatabaseValueConvertible & StatementColumnConvertible & Equatable>(
+        _ db: Database,
+        _ sql: String,
+        _ type: T.Type,
+        expectedSQLiteConversion: T?,
+        expectedDatabaseValueConversion: T?,
+        file: StaticString = #file,
+        line: UInt = #line) throws
+    {
+        try _assertDecoding(
+            db, sql, type,
+            expectedSQLiteConversion: expectedSQLiteConversion,
+            expectedDatabaseValueConversion: expectedDatabaseValueConversion,
+            file: file, line: line)
+    }
+    
+    private func assertFailedDecoding<T: DatabaseValueConvertible>(
+        _ db: Database,
+        _ sql: String,
+        _ type: T.Type,
+        file: StaticString = #file,
+        line: UInt = #line) throws
+    {
+        try _assertFailedDecoding(db, sql, type, file: file, line: line)
+    }
+    #endif
     
     // Datatypes In SQLite Version 3: https://www.sqlite.org/datatype3.html
     

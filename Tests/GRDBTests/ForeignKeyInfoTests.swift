@@ -1,13 +1,9 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    @testable import GRDBCustomSQLite
-#else
-    @testable import GRDB
-#endif
+@testable import GRDB
 
 class ForeignKeyInfoTests: GRDBTestCase {
     
-    private func assertEqual(_ lhs: ForeignKeyInfo, _ rhs: ForeignKeyInfo, file: StaticString = #file, line: UInt = #line) {
+    private func _assertEqual(_ lhs: ForeignKeyInfo, _ rhs: ForeignKeyInfo, file: StaticString, line: UInt) {
         XCTAssertEqual(lhs.destinationTable, rhs.destinationTable, file: file, line: line)
         XCTAssertEqual(lhs.mapping.count, rhs.mapping.count, file: file, line: line)
         for (larrow, rarrow) in zip(lhs.mapping, rhs.mapping) {
@@ -15,6 +11,17 @@ class ForeignKeyInfoTests: GRDBTestCase {
             XCTAssertEqual(larrow.destination, rarrow.destination, file: file, line: line)
         }
     }
+    
+    // #file vs. #filePath dance
+    #if compiler(>=5.3)
+    private func assertEqual(_ lhs: ForeignKeyInfo, _ rhs: ForeignKeyInfo, file: StaticString = #filePath, line: UInt = #line) {
+        _assertEqual(lhs, rhs, file: file, line: line)
+    }
+    #else
+    private func assertEqual(_ lhs: ForeignKeyInfo, _ rhs: ForeignKeyInfo, file: StaticString = #file, line: UInt = #line) {
+        _assertEqual(lhs, rhs, file: file, line: line)
+    }
+    #endif
     
     func testForeignKeys() throws {
         let dbQueue = try makeDatabaseQueue()

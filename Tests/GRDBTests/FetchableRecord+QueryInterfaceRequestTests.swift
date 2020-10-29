@@ -1,11 +1,7 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
-private struct Reader {
+private struct Reader: Hashable {
     var id: Int64?
     let name: String
     let age: Int?
@@ -97,7 +93,7 @@ class FetchableRecordQueryInterfaceRequestTests: GRDBTestCase {
             }
             
             do {
-                let names = try request.fetchCursor(db).map { $0.name }
+                let names = try request.fetchCursor(db).map(\.name)
                 XCTAssertEqual(try names.next()!, arthur.name)
                 XCTAssertEqual(try names.next()!, barbara.name)
                 XCTAssertTrue(try names.next() == nil)
@@ -129,6 +125,15 @@ class FetchableRecordQueryInterfaceRequestTests: GRDBTestCase {
             }
             
             do {
+                let readers = try Reader.fetchSet(db)
+                XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\"")
+                XCTAssertEqual(readers.count, 2)
+                XCTAssertEqual(Set(readers.map(\.id)), [arthur.id!, barbara.id!])
+                XCTAssertEqual(Set(readers.map(\.name)), [arthur.name, barbara.name])
+                XCTAssertEqual(Set(readers.map(\.age)), [arthur.age, barbara.age])
+            }
+            
+            do {
                 let reader = try Reader.fetchOne(db)!
                 XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"readers\" LIMIT 1")
                 XCTAssertEqual(reader.id!, arthur.id!)
@@ -138,7 +143,7 @@ class FetchableRecordQueryInterfaceRequestTests: GRDBTestCase {
             
             do {
                 let cursor = try Reader.fetchCursor(db)
-                let names = cursor.map { $0.name }
+                let names = cursor.map(\.name)
                 XCTAssertEqual(try names.next()!, arthur.name)
                 XCTAssertEqual(try names.next()!, barbara.name)
                 XCTAssertTrue(try names.next() == nil)
@@ -188,7 +193,7 @@ class FetchableRecordQueryInterfaceRequestTests: GRDBTestCase {
             }
             
             do {
-                let names = try AltReader.fetchCursor(db, request).map { $0.name }
+                let names = try AltReader.fetchCursor(db, request).map(\.name)
                 XCTAssertEqual(try names.next()!, arthur.name)
                 XCTAssertEqual(try names.next()!, barbara.name)
                 XCTAssertTrue(try names.next() == nil)

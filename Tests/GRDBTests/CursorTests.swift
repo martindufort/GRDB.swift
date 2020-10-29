@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 private struct TestError : Error { }
 
@@ -172,6 +168,24 @@ class CursorTests: GRDBTestCase {
             let cursor = AnyCursor([1, 2, 3, 4, 5])
             let suffix = try cursor.suffix(10)
             XCTAssertTrue(suffix == [1, 2, 3, 4, 5])
+        }
+    }
+    
+    func testDictionaryGrouping() throws {
+        do {
+            let cursor = AnyCursor<Int>([])
+            let dictionary = try Dictionary(grouping: cursor, by: { $0 % 2 })
+            XCTAssertEqual(dictionary, [:])
+        }
+        do {
+            let cursor = AnyCursor([1, 2, 3, 4, 5])
+            let dictionary = try Dictionary(grouping: cursor, by: { $0 % 2 })
+            XCTAssertEqual(dictionary, [0: [2, 4], 1: [1, 3, 5]])
+        }
+        do {
+            let cursor = AnyCursor([5, 4, 3, 2, 1])
+            let dictionary = try Dictionary(grouping: cursor, by: { $0 % 2 })
+            XCTAssertEqual(dictionary, [0: [4, 2], 1: [5, 3, 1]])
         }
     }
 }

@@ -1,25 +1,34 @@
 #ifndef grdb_config_h
 #define grdb_config_h
 
-#if defined(COCOAPODS)
-    #if defined(GRDBCIPHER)
-        #include <SQLCipher/sqlite3.h>
-    #else
-        #include <sqlite3.h>
-    #endif
-#else
-    #if !defined(GRDBCUSTOMSQLITE)
-        #include <sqlite3.h>
-    #endif
-#endif
+#include <sqlite3.h>
 
 typedef void(*errorLogCallback)(void *pArg, int iErrCode, const char *zMsg);
 
-// Wrapper around sqlite3_config(SQLITE_CONFIG_LOG, ...) which is a variadic
-// function that can't be used from Swift.
+/// Wrapper around sqlite3_config(SQLITE_CONFIG_LOG, ...) which is a variadic
+/// function that can't be used from Swift.
 static inline void registerErrorLogCallback(errorLogCallback callback) {
     sqlite3_config(SQLITE_CONFIG_LOG, callback, 0);
 }
+
+#if SQLITE_VERSION_NUMBER >= 3029000
+/// Wrapper around sqlite3_db_config() which is a variadic function that can't
+/// be used from Swift.
+static inline void disableDoubleQuotedStringLiterals(sqlite3 *db) {
+    sqlite3_db_config(db, SQLITE_DBCONFIG_DQS_DDL, 0, (void *)0);
+    sqlite3_db_config(db, SQLITE_DBCONFIG_DQS_DML, 0, (void *)0);
+}
+
+/// Wrapper around sqlite3_db_config() which is a variadic function that can't
+/// be used from Swift.
+static inline void enableDoubleQuotedStringLiterals(sqlite3 *db) {
+    sqlite3_db_config(db, SQLITE_DBCONFIG_DQS_DDL, 1, (void *)0);
+    sqlite3_db_config(db, SQLITE_DBCONFIG_DQS_DML, 1, (void *)0);
+}
+#else
+static inline void disableDoubleQuotedStringLiterals(sqlite3 *db) { }
+static inline void enableDoubleQuotedStringLiterals(sqlite3 *db) { }
+#endif
 
 // Expose APIs that are missing from system <sqlite3.h>
 #ifdef GRDB_SQLITE_ENABLE_PREUPDATE_HOOK
@@ -41,5 +50,4 @@ SQLITE_API int sqlite3_preupdate_count(sqlite3 *);
 SQLITE_API int sqlite3_preupdate_depth(sqlite3 *);
 SQLITE_API int sqlite3_preupdate_new(sqlite3 *, int, sqlite3_value **);
 #endif /* GRDB_SQLITE_ENABLE_PREUPDATE_HOOK */
-
 #endif /* grdb_config_h */

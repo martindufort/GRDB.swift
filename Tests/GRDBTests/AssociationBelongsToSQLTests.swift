@@ -1,9 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 /// Test SQL generation
 class AssociationBelongsToSQLTests: GRDBTestCase {
@@ -1000,6 +996,195 @@ class AssociationBelongsToSQLTests: GRDBTestCase {
             struct B: TableRecord { }
             let request = B.joining(required: B.belongsTo(A.self))
             let _ = try request.fetchCount(db)
+        }
+    }
+    
+    func testCaseInsensitivity() throws {
+        struct Child : TableRecord, EncodableRecord {
+            static let databaseTableName = "CHILDREN"
+            func encode(to container: inout PersistenceContainer) {
+                container["PaReNtId"] = 1
+            }
+        }
+        
+        struct Parent : TableRecord {
+            static let databaseTableName = "PARENTS"
+        }
+        
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            try db.create(table: "parents") { t in
+                t.column("id", .integer).primaryKey()
+                t.column("name", .text)
+            }
+            try db.create(table: "children") { t in
+                t.column("parentId", .integer).references("parents")
+            }
+        }
+        
+        try dbQueue.inDatabase { db in
+            do {
+                let association = Child.belongsTo(Parent.self)
+                try assertEqualSQL(db, Child.including(required: association), """
+                    SELECT "CHILDREN".*, "PARENTS".* \
+                    FROM "CHILDREN" \
+                    JOIN "PARENTS" ON "PARENTS"."id" = "CHILDREN"."parentId"
+                    """)
+                try assertEqualSQL(db, Child.including(optional: association), """
+                    SELECT "CHILDREN".*, "PARENTS".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON "PARENTS"."id" = "CHILDREN"."parentId"
+                    """)
+                try assertEqualSQL(db, Child.joining(required: association), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    JOIN "PARENTS" ON "PARENTS"."id" = "CHILDREN"."parentId"
+                    """)
+                try assertEqualSQL(db, Child.joining(optional: association), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON "PARENTS"."id" = "CHILDREN"."parentId"
+                    """)
+                try assertEqualSQL(db, Child.joining(optional: association.filter(Column("name") == "foo")), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON ("PARENTS"."id" = "CHILDREN"."parentId") AND ("PARENTS"."name" = 'foo')
+                    """)
+                try assertEqualSQL(db, Child().request(for: association), """
+                    SELECT * FROM "PARENTS" WHERE "id" = 1
+                    """)
+                try assertEqualSQL(db, Child().request(for: association).aliased(TableAlias(name: "custom")), """
+                    SELECT "custom".* FROM "PARENTS" "custom" WHERE "custom"."id" = 1
+                    """)
+            }
+            do {
+                let association = Child.belongsTo(Parent.self, using: ForeignKey([Column("PARENTID")]))
+                try assertEqualSQL(db, Child.including(required: association), """
+                    SELECT "CHILDREN".*, "PARENTS".* \
+                    FROM "CHILDREN" \
+                    JOIN "PARENTS" ON "PARENTS"."id" = "CHILDREN"."parentId"
+                    """)
+                try assertEqualSQL(db, Child.including(optional: association), """
+                    SELECT "CHILDREN".*, "PARENTS".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON "PARENTS"."id" = "CHILDREN"."parentId"
+                    """)
+                try assertEqualSQL(db, Child.joining(required: association), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    JOIN "PARENTS" ON "PARENTS"."id" = "CHILDREN"."parentId"
+                    """)
+                try assertEqualSQL(db, Child.joining(optional: association), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON "PARENTS"."id" = "CHILDREN"."parentId"
+                    """)
+                try assertEqualSQL(db, Child.joining(optional: association.filter(Column("name") == "foo")), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON ("PARENTS"."id" = "CHILDREN"."parentId") AND ("PARENTS"."name" = 'foo')
+                    """)
+                try assertEqualSQL(db, Child().request(for: association), """
+                    SELECT * FROM "PARENTS" WHERE "id" = 1
+                    """)
+                try assertEqualSQL(db, Child().request(for: association).aliased(TableAlias(name: "custom")), """
+                    SELECT "custom".* FROM "PARENTS" "custom" WHERE "custom"."id" = 1
+                    """)
+            }
+            do {
+                let association = Child.belongsTo(Parent.self, using: ForeignKey([Column("PARENTID")], to: [Column("ID")]))
+                try assertEqualSQL(db, Child.including(required: association), """
+                    SELECT "CHILDREN".*, "PARENTS".* \
+                    FROM "CHILDREN" \
+                    JOIN "PARENTS" ON "PARENTS"."ID" = "CHILDREN"."PARENTID"
+                    """)
+                try assertEqualSQL(db, Child.including(optional: association), """
+                    SELECT "CHILDREN".*, "PARENTS".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON "PARENTS"."ID" = "CHILDREN"."PARENTID"
+                    """)
+                try assertEqualSQL(db, Child.joining(required: association), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    JOIN "PARENTS" ON "PARENTS"."ID" = "CHILDREN"."PARENTID"
+                    """)
+                try assertEqualSQL(db, Child.joining(optional: association), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON "PARENTS"."ID" = "CHILDREN"."PARENTID"
+                    """)
+                try assertEqualSQL(db, Child.joining(optional: association.filter(Column("name") == "foo")), """
+                    SELECT "CHILDREN".* \
+                    FROM "CHILDREN" \
+                    LEFT JOIN "PARENTS" ON ("PARENTS"."ID" = "CHILDREN"."PARENTID") AND ("PARENTS"."name" = 'foo')
+                    """)
+                try assertEqualSQL(db, Child().request(for: association), """
+                    SELECT * FROM "PARENTS" WHERE "ID" = 1
+                    """)
+                try assertEqualSQL(db, Child().request(for: association).aliased(TableAlias(name: "custom")), """
+                    SELECT "custom".* FROM "PARENTS" "custom" WHERE "custom"."ID" = 1
+                    """)
+            }
+        }
+    }
+    
+    // Test for the "How do I filter records and only keep those that are
+    // associated to another record?" FAQ
+    func testRecordsFilteredByExistingAssociatedRecord() throws {
+        struct Book: TableRecord {
+            static let author = belongsTo(Author.self)
+        }
+
+        struct Author: TableRecord {
+        }
+        
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.write { db in
+            try db.create(table: "author") { t in
+                t.autoIncrementedPrimaryKey("id")
+            }
+            try db.create(table: "book") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("authorID", .integer).references("author")
+            }
+            
+            let request = Book.joining(required: Book.author)
+            try assertEqualSQL(db, request, """
+                SELECT "book".* FROM "book" \
+                JOIN "author" ON "author"."id" = "book"."authorID"
+                """)
+        }
+    }
+    
+    // Test for the "How do I filter records and only keep those that are NOT
+    // associated to another record?" FAQ
+    func testRecordsFilteredByNonExistingAssociatedRecord() throws {
+        struct Book: TableRecord {
+            static let author = belongsTo(Author.self)
+        }
+
+        struct Author: TableRecord {
+        }
+        
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.write { db in
+            try db.create(table: "author") { t in
+                t.autoIncrementedPrimaryKey("id")
+            }
+            try db.create(table: "book") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("authorID", .integer).references("author")
+            }
+            
+            let authorAlias = TableAlias()
+            let request = Book
+                .joining(optional: Book.author.aliased(authorAlias))
+                .filter(!authorAlias.exists)
+            try assertEqualSQL(db, request, """
+                SELECT "book".* FROM "book" \
+                LEFT JOIN "author" ON "author"."id" = "book"."authorID" \
+                WHERE "author"."id" IS NULL
+                """)
         }
     }
 }

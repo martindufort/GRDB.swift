@@ -7,7 +7,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabaseQueueWithPassphraseToDatabaseQueueWithPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -19,7 +19,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -32,7 +32,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabaseQueueWithPassphraseToDatabaseQueueWithoutPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -56,7 +56,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabaseQueueWithPassphraseToDatabaseQueueWithWrongPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -68,7 +68,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("wrong")
             }
             do {
@@ -84,7 +84,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabaseQueueWithPassphraseToDatabaseQueueWithNewPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -96,7 +96,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -116,7 +116,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("newSecret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -129,7 +129,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabaseQueueWithPassphraseToDatabasePoolWithPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -141,7 +141,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -154,7 +154,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabaseQueueWithPassphraseToDatabasePoolWithoutPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -178,7 +178,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabaseQueueWithPassphraseToDatabasePoolWithWrongPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -190,7 +190,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("wrong")
             }
             do {
@@ -206,7 +206,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabaseQueueWithPassphraseToDatabasePoolWithNewPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -219,7 +219,7 @@ class EncryptionTests: GRDBTestCase {
         do {
             var passphrase = "secret"
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase(passphrase)
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -242,7 +242,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("newSecret")
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -255,7 +255,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabasePoolWithPassphraseToDatabasePoolWithPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -267,7 +267,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -280,7 +280,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabasePoolWithPassphraseToDatabasePoolWithoutPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -304,7 +304,7 @@ class EncryptionTests: GRDBTestCase {
     func testDatabasePoolWithPassphraseToDatabasePoolWithWrongPassphrase() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -316,7 +316,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("wrong")
             }
             do {
@@ -333,7 +333,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -346,7 +346,7 @@ class EncryptionTests: GRDBTestCase {
         do {
             var passphrase = "secret"
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase(passphrase)
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -369,7 +369,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("newSecret")
             }
             let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
@@ -391,7 +391,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
@@ -425,7 +425,7 @@ class EncryptionTests: GRDBTestCase {
     func testCipherPageSize() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
                 try db.execute(sql: "PRAGMA cipher_page_size = 8192")
             }
@@ -438,7 +438,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
                 try db.execute(sql: "PRAGMA cipher_page_size = 4096")
             }
@@ -460,7 +460,7 @@ class EncryptionTests: GRDBTestCase {
     func testCipherKDFIterations() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
                 try db.execute(sql: "PRAGMA kdf_iter = 128000")
             }
@@ -473,7 +473,7 @@ class EncryptionTests: GRDBTestCase {
 
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
                 try db.execute(sql: "PRAGMA kdf_iter = 128000")
             }
@@ -495,7 +495,7 @@ class EncryptionTests: GRDBTestCase {
     func testCipherWithMismatchedKDFIterations() throws {
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
                 try db.execute(sql: "PRAGMA kdf_iter = 128000")
             }
@@ -515,7 +515,7 @@ class EncryptionTests: GRDBTestCase {
 
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
                 try db.execute(sql: "PRAGMA kdf_iter = 64000")
             }
@@ -545,7 +545,7 @@ class EncryptionTests: GRDBTestCase {
             }
             
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             do {
@@ -567,7 +567,7 @@ class EncryptionTests: GRDBTestCase {
         
         do {
             var config = Configuration()
-            config.prepareDatabase = { db in
+            config.prepareDatabase { db in
                 try db.usePassphrase("secret")
             }
             let dbQueue = try makeDatabaseQueue(filename: "encrypted.sqlite", configuration: config)
@@ -588,7 +588,7 @@ class EncryptionTests: GRDBTestCase {
             let testBundle = Bundle(for: type(of: self))
             let path = testBundle.url(forResource: "db", withExtension: "SQLCipher3")!.path
             var configuration = Configuration()
-            configuration.prepareDatabase = { db in
+            configuration.prepareDatabase { db in
                 try db.usePassphrase("secret")
                 try db.execute(sql: "PRAGMA cipher_compatibility = 3")
             }
@@ -603,164 +603,6 @@ class EncryptionTests: GRDBTestCase {
                 let dbPool = try DatabasePool(path: path, configuration: configuration)
                 let success = try dbPool.read { try String.fetchOne($0, sql: "SELECT a FROM t") }
                 XCTAssertEqual(success, "success")
-            }
-        }
-    }
-    
-    // MARK: - Deprecated
-    
-    func testDeprecatedPassphrase() throws {
-        do {
-            var config = Configuration()
-            config.passphrase = "secret"
-            let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "CREATE TABLE data (value INTEGER)")
-                try db.execute(sql: "INSERT INTO data (value) VALUES (1)")
-            }
-        }
-
-        do {
-            var config = Configuration()
-            config.passphrase = "secret"
-            let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
-            try dbQueue.inDatabase { db in
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 1)
-            }
-        }
-
-        do {
-            var config = Configuration()
-            config.passphrase = nil
-            do {
-                _ = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
-                XCTFail("Expected error")
-            } catch let error as DatabaseError {
-                XCTAssertEqual(error.resultCode, .SQLITE_NOTADB)
-                XCTAssertEqual(error.message!, "file is not a database")
-            }
-        }
-    }
-    
-    func testDeprecatedDatabaseQueueWithPassphraseToDatabaseQueueWithNewPassphrase() throws {
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("secret")
-            }
-            let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "CREATE TABLE data (value INTEGER)")
-                try db.execute(sql: "INSERT INTO data (value) VALUES (1)")
-            }
-        }
-        
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("secret")
-            }
-            let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
-            try dbQueue.change(passphrase: "newSecret")
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "INSERT INTO data (value) VALUES (2)")
-            }
-            try dbQueue.inDatabase { db in
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 2)
-            }
-        }
-        
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("newSecret")
-            }
-            let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
-            try dbQueue.inDatabase { db in
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 2)
-            }
-        }
-    }
-    
-    func testDeprecatedDatabaseQueueWithPassphraseToDatabasePoolWithNewPassphrase() throws {
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("secret")
-            }
-            let dbQueue = try makeDatabaseQueue(filename: "test.sqlite", configuration: config)
-            try dbQueue.inDatabase { db in
-                try db.execute(sql: "CREATE TABLE data (value INTEGER)")
-                try db.execute(sql: "INSERT INTO data (value) VALUES (1)")
-            }
-        }
-        
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("secret")
-            }
-            let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
-            try dbPool.change(passphrase: "newSecret")
-            try dbPool.write { db in
-                try db.execute(sql: "INSERT INTO data (value) VALUES (2)")
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 2)
-            }
-            try dbPool.read { db in
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 2)
-            }
-        }
-        
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("newSecret")
-            }
-            let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
-            try dbPool.read { db in
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 2)
-            }
-        }
-    }
-
-    func testDeprecatedDatabasePoolWithPassphraseToDatabasePoolWithNewPassphrase() throws {
-        
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("secret")
-            }
-            let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
-            try dbPool.write { db in
-                try db.execute(sql: "CREATE TABLE data (value INTEGER)")
-                try db.execute(sql: "INSERT INTO data (value) VALUES (1)")
-            }
-        }
-        
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("secret")
-            }
-            let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
-            try dbPool.change(passphrase: "newSecret")
-            try dbPool.write { db in
-                try db.execute(sql: "INSERT INTO data (value) VALUES (2)")
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 2)
-            }
-            try dbPool.read { db in
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 2)
-            }
-        }
-        
-        do {
-            var config = Configuration()
-            config.prepareDatabase = { db in
-                try db.usePassphrase("newSecret")
-            }
-            let dbPool = try makeDatabasePool(filename: "test.sqlite", configuration: config)
-            try dbPool.read { db in
-                XCTAssertEqual(try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM data")!, 2)
             }
         }
     }

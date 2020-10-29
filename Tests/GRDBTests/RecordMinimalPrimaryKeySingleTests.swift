@@ -1,13 +1,9 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    import GRDBCustomSQLite
-#else
-    import GRDB
-#endif
+import GRDB
 
 // MinimalSingle is the most tiny class with a Single row primary key which
 // supports read and write operations of Record.
-class MinimalSingle: Record {
+class MinimalSingle: Record, Hashable {
     var UUID: String?
     
     init(UUID: String? = nil) {
@@ -22,7 +18,7 @@ class MinimalSingle: Record {
     // Record
     
     override class var databaseTableName: String {
-        return "minimalSingles"
+        "minimalSingles"
     }
     
     required init(row: Row) {
@@ -32,6 +28,14 @@ class MinimalSingle: Record {
     
     override func encode(to container: inout PersistenceContainer) {
         container["UUID"] = UUID
+    }
+    
+    static func == (lhs: MinimalSingle, rhs: MinimalSingle) -> Bool {
+        lhs.UUID == rhs.UUID
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(UUID)
     }
 }
 
@@ -59,7 +63,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testInsertWithNotNilPrimaryKeyThatDoesNotMatchAnyRowInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -71,7 +75,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testInsertWithNotNilPrimaryKeyThatMatchesARowThrowsDatabaseError() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -86,7 +90,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testInsertAfterDeleteInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -100,10 +104,10 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
-
+    
+    
     // MARK: - Update
-
+    
     func testUpdateWithNotNilPrimaryKeyThatDoesNotMatchAnyRowThrowsRecordNotFound() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -119,7 +123,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testUpdateWithNotNilPrimaryKeyThatMatchesARowUpdatesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -132,7 +136,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testUpdateAfterDeleteThrowsRecordNotFound() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -150,10 +154,10 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
-
+    
+    
     // MARK: - Save
-
+    
     func testSaveWithNilPrimaryKeyThrowsDatabaseError() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -167,7 +171,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testSaveWithNotNilPrimaryKeyThatDoesNotMatchAnyRowInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -179,7 +183,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testSaveWithNotNilPrimaryKeyThatMatchesARowUpdatesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -192,7 +196,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
+    
     func testSaveAfterDeleteInsertsARow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -206,10 +210,10 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             assert(record, isEncodedIn: row)
         }
     }
-
-
+    
+    
     // MARK: - Delete
-
+    
     func testDeleteWithNotNilPrimaryKeyThatDoesNotMatchAnyRowDoesNothing() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -219,7 +223,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             XCTAssertFalse(deleted)
         }
     }
-
+    
     func testDeleteWithNotNilPrimaryKeyThatMatchesARowDeletesThatRow() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -233,7 +237,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             XCTAssertTrue(row == nil)
         }
     }
-
+    
     func testDeleteAfterDeleteDoesNothing() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -246,8 +250,8 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             XCTAssertFalse(deleted)
         }
     }
-
-
+    
+    
     // MARK: - Fetch With Key
     
     func testFetchCursorWithKeys() throws {
@@ -280,7 +284,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testFetchAllWithKeys() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -309,7 +313,36 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
+    func testFetchSetWithKeys() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = MinimalSingle()
+            record1.UUID = "theUUID1"
+            try record1.insert(db)
+            let record2 = MinimalSingle()
+            record2.UUID = "theUUID2"
+            try record2.insert(db)
+            
+            do {
+                let fetchedRecords = try MinimalSingle.fetchSet(db, keys: [])
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let fetchedRecords = try MinimalSingle.fetchSet(db, keys: [["UUID": record1.UUID], ["UUID": record2.UUID]])
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map { $0.UUID! }), Set([record1.UUID!, record2.UUID!]))
+            }
+            
+            do {
+                let fetchedRecords = try MinimalSingle.fetchSet(db, keys: [["UUID": record1.UUID], ["UUID": nil]])
+                XCTAssertEqual(fetchedRecords.count, 1)
+                XCTAssertEqual(fetchedRecords.first!.UUID, record1.UUID!)
+            }
+        }
+    }
+    
     func testFetchOneWithKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -322,7 +355,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             XCTAssertEqual(lastSQLQuery, "SELECT * FROM \"minimalSingles\" WHERE \"UUID\" = '\(record.UUID!)'")
         }
     }
-
+    
     
     // MARK: - Fetch With Key Request
     
@@ -386,6 +419,35 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
         }
     }
     
+    func testFetchSetWithKeysRequest() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = MinimalSingle()
+            record1.UUID = "theUUID1"
+            try record1.insert(db)
+            let record2 = MinimalSingle()
+            record2.UUID = "theUUID2"
+            try record2.insert(db)
+            
+            do {
+                let fetchedRecords = try MinimalSingle.filter(keys: []).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let fetchedRecords = try MinimalSingle.filter(keys: [["UUID": record1.UUID], ["UUID": record2.UUID]]).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map { $0.UUID! }), Set([record1.UUID!, record2.UUID!]))
+            }
+            
+            do {
+                let fetchedRecords = try MinimalSingle.filter(keys: [["UUID": record1.UUID], ["UUID": nil]]).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 1)
+                XCTAssertEqual(fetchedRecords.first!.UUID, record1.UUID!)
+            }
+        }
+    }
+    
     func testFetchOneWithKeyRequest() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -406,8 +468,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             let request = MinimalSingle.orderByPrimaryKey()
-            let sqlRequest = try SQLRequest(db, request: request)
-            XCTAssertEqual(sqlRequest.sql, "SELECT * FROM \"minimalSingles\" ORDER BY \"UUID\"")
+            try assertEqualSQL(db, request, "SELECT * FROM \"minimalSingles\" ORDER BY \"UUID\"")
         }
     }
     
@@ -439,7 +500,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
     func testFetchAllWithPrimaryKeys() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -464,7 +525,32 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
+    func testFetchSetWithPrimaryKeys() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = MinimalSingle()
+            record1.UUID = "theUUID1"
+            try record1.insert(db)
+            let record2 = MinimalSingle()
+            record2.UUID = "theUUID2"
+            try record2.insert(db)
+            
+            do {
+                let UUIDs: [String] = []
+                let fetchedRecords = try MinimalSingle.fetchSet(db, keys: UUIDs)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let UUIDs = [record1.UUID!, record2.UUID!]
+                let fetchedRecords = try MinimalSingle.fetchSet(db, keys: UUIDs)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map { $0.UUID! }), Set(UUIDs))
+            }
+        }
+    }
+    
     func testFetchOneWithPrimaryKey() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -485,7 +571,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
+    
     
     // MARK: - Fetch With Primary Key Request
     
@@ -540,6 +626,31 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
         }
     }
     
+    func testFetchSetWithPrimaryKeysRequest() throws {
+        let dbQueue = try makeDatabaseQueue()
+        try dbQueue.inDatabase { db in
+            let record1 = MinimalSingle()
+            record1.UUID = "theUUID1"
+            try record1.insert(db)
+            let record2 = MinimalSingle()
+            record2.UUID = "theUUID2"
+            try record2.insert(db)
+            
+            do {
+                let UUIDs: [String] = []
+                let fetchedRecords = try MinimalSingle.filter(keys: UUIDs).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 0)
+            }
+            
+            do {
+                let UUIDs = [record1.UUID!, record2.UUID!]
+                let fetchedRecords = try MinimalSingle.filter(keys: UUIDs).fetchSet(db)
+                XCTAssertEqual(fetchedRecords.count, 2)
+                XCTAssertEqual(Set(fetchedRecords.map { $0.UUID! }), Set(UUIDs))
+            }
+        }
+    }
+    
     func testFetchOneWithPrimaryKeyRequest() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -560,10 +671,10 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             }
         }
     }
-
-
+    
+    
     // MARK: - Exists
-
+    
     func testExistsWithNotNilPrimaryKeyThatDoesNotMatchAnyRowReturnsFalse() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -572,7 +683,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             XCTAssertFalse(try record.exists(db))
         }
     }
-
+    
     func testExistsWithNotNilPrimaryKeyThatMatchesARowReturnsTrue() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
@@ -582,7 +693,7 @@ class RecordMinimalPrimaryKeySingleTests: GRDBTestCase {
             XCTAssertTrue(try record.exists(db))
         }
     }
-
+    
     func testExistsAfterDeleteReturnsTrue() throws {
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in

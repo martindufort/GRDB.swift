@@ -1,49 +1,17 @@
 import GRDB
 
-// A plain Player struct
-struct Player {
-    // Prefer Int64 for auto-incremented database ids
+/// The Player struct.
+///
+/// Hashable conformance supports table view updates
+struct Player: Hashable {
+    /// The player id.
+    ///
+    /// Int64 is the recommended type for auto-incremented database ids.
+    /// Use nil for players that are not inserted yet in the database.
     var id: Int64?
     var name: String
     var score: Int
 }
-
-// Hashable conformance supports tableView diffing
-extension Player: Hashable { }
-
-// MARK: - Persistence
-
-// Turn Player into a Codable Record.
-// See https://github.com/groue/GRDB.swift/blob/master/README.md#records
-extension Player: Codable, FetchableRecord, MutablePersistableRecord {
-    // Define database columns from CodingKeys
-    private enum Columns {
-        static let id = Column(CodingKeys.id)
-        static let name = Column(CodingKeys.name)
-        static let score = Column(CodingKeys.score)
-    }
-    
-    // Update a player id after it has been inserted in the database.
-    mutating func didInsert(with rowID: Int64, for column: String?) {
-        id = rowID
-    }
-}
-
-// MARK: - Database access
-
-// Define some useful player requests.
-// See https://github.com/groue/GRDB.swift/blob/master/README.md#requests
-extension Player {
-    static func orderedByName() -> QueryInterfaceRequest<Player> {
-        return Player.order(Columns.name)
-    }
-    
-    static func orderedByScore() -> QueryInterfaceRequest<Player> {
-        return Player.order(Columns.score.desc, Columns.name)
-    }
-}
-
-// MARK: - Player Randomization
 
 extension Player {
     private static let names = [
@@ -56,11 +24,71 @@ extension Player {
         "Victor", "Violette", "Wilfried", "Wilhelmina", "Yvon", "Yann",
         "Zazie", "Zoé"]
     
-    static func randomName() -> String {
-        return names.randomElement()!
+    /// Creates a new player with empty name and zero score
+    static func new() -> Player {
+        Player(id: nil, name: "", score: 0)
     }
     
+    /// Creates a new player with random name and random score
+    static func newRandom() -> Player {
+        Player(id: nil, name: randomName(), score: randomScore())
+    }
+    
+    /// Returns a random name
+    static func randomName() -> String {
+        names.randomElement()!
+    }
+    
+    /// Returns a random score
     static func randomScore() -> Int {
-        return 10 * Int.random(in: 0...100)
+        10 * Int.random(in: 0...100)
+    }
+}
+
+// MARK: - Persistence
+
+/// Make Player a Codable Record.
+///
+/// See https://github.com/groue/GRDB.swift/blob/master/README.md#records
+extension Player: Codable, FetchableRecord, MutablePersistableRecord {
+    // Define database columns from CodingKeys
+    fileprivate enum Columns {
+        static let name = Column(CodingKeys.name)
+        static let score = Column(CodingKeys.score)
+    }
+    
+    /// Updates a player id after it has been inserted in the database.
+    mutating func didInsert(with rowID: Int64, for column: String?) {
+        id = rowID
+    }
+}
+
+// MARK: - Player Database Requests
+
+/// Define some player requests used by the application.
+///
+/// See https://github.com/groue/GRDB.swift/blob/master/README.md#requests
+/// See https://github.com/groue/GRDB.swift/blob/master/Documentation/GoodPracticesForDesigningRecordTypes.md
+extension DerivableRequest where RowDecoder == Player {
+    /// A request of players ordered by name
+    ///
+    /// For example:
+    ///
+    ///     let players = try dbQueue.read { db in
+    ///         try Player.all().orderedByName().fetchAll(db)
+    ///     }
+    func orderedByName() -> Self {
+        order(Player.Columns.name)
+    }
+    
+    /// A request of players ordered by score
+    ///
+    /// For example:
+    ///
+    ///     let players = try dbQueue.read { db in
+    ///         try Player.all().orderedByScore().fetchAll(db)
+    ///     }
+    func orderedByScore() -> Self {
+        order(Player.Columns.score.desc, Player.Columns.name)
     }
 }

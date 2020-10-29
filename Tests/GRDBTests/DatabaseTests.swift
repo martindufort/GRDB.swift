@@ -1,14 +1,5 @@
 import XCTest
-#if GRDBCUSTOMSQLITE
-    @testable import GRDBCustomSQLite
-#else
-    #if SWIFT_PACKAGE
-        import CSQLite
-    #else
-        import SQLite3
-    #endif
-    @testable import GRDB
-#endif
+@testable import GRDB
 
 class DatabaseTests : GRDBTestCase {
     
@@ -266,14 +257,6 @@ class DatabaseTests : GRDBTestCase {
     }
 
     func testFailedCommitIsRollbacked() throws {
-        // PRAGMA defer_foreign_keys = ON was introduced in SQLite 3.12.0 http://www.sqlite.org/changes.html#version_3_8_0
-        // It is available from iOS 8.2 and OS X 10.10 https://github.com/yapstudios/YapDatabase/wiki/SQLite-version-(bundled-with-OS)
-        #if !GRDBCUSTOMSQLITE && !GRDBCIPHER
-            guard #available(iOS 8.2, OSX 10.10, *) else {
-                return
-            }
-        #endif
-        
         let dbQueue = try makeDatabaseQueue()
         try dbQueue.inDatabase { db in
             try db.execute(sql: "CREATE TABLE parent (id INTEGER PRIMARY KEY)")
@@ -295,7 +278,7 @@ class DatabaseTests : GRDBTestCase {
             XCTAssertEqual(error.resultCode, .SQLITE_CONSTRAINT)
             XCTAssertEqual(error.message!, "FOREIGN KEY constraint failed")
             XCTAssertEqual(error.sql!, "COMMIT TRANSACTION")
-            XCTAssertEqual(error.description, "SQLite error 19 with statement `COMMIT TRANSACTION`: FOREIGN KEY constraint failed")
+            XCTAssertEqual(error.description, "SQLite error 19: FOREIGN KEY constraint failed - while executing `COMMIT TRANSACTION`")
         }
         
         // Make sure we can open another transaction
@@ -361,5 +344,42 @@ class DatabaseTests : GRDBTestCase {
             // Write access OK
             try db.execute(sql: "INSERT INTO t DEFAULT VALUES")
         }
+    }
+    
+    func testCheckpoint() throws {
+        do {
+            // Not a WAL database
+            let dbQueue = try makeDatabaseQueue()
+            let result = try dbQueue.inDatabase {
+                try $0.checkpoint()
+            }
+            XCTAssertEqual(result.walFrameCount, -1)
+            XCTAssertEqual(result.checkpointedFrameCount, -1)
+        }
+        do {
+            // WAL database
+            let dbPool = try makeDatabasePool()
+            let result = try dbPool.writeWithoutTransaction {
+                try $0.checkpoint()
+            }
+            XCTAssertGreaterThanOrEqual(result.walFrameCount, 0)
+            XCTAssertGreaterThanOrEqual(result.checkpointedFrameCount, 0)
+        }
+        do {
+            // WAL database + TRUNCATE
+            let dbPool = try makeDatabasePool()
+            let result = try dbPool.writeWithoutTransaction {
+                try $0.checkpoint(.truncate)
+            }
+            XCTAssertEqual(result.walFrameCount, 0)
+            XCTAssertEqual(result.checkpointedFrameCount, 0)
+        }
+    }
+    
+    func testMaximumStatementArgumentCount() throws {
+        let dbQueue = try makeDatabaseQueue()
+        let count = dbQueue.read { $0.maximumStatementArgumentCount }
+        // 999 should be safe: https://www.sqlite.org/limits.html
+        XCTAssertGreaterThanOrEqual(count, 999)
     }
 }
